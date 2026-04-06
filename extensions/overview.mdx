@@ -1,0 +1,103 @@
+---
+title: "Extensions Overview"
+description: "A curated, ordered learning path. Each extension teaches new concepts through a real build."
+---
+
+Extensions are the core learning path for Open Brain. You build six real systems, each one teaching new patterns through something you'll actually use. By the end, your agent manages your household, your schedule, your meals, your professional network, and your career — all interconnected.
+
+<Note>
+  Start from the top. Each extension introduces concepts that later ones build on. You can skip ahead, but you'll learn faster by working in order.
+</Note>
+
+## Prerequisites
+
+You need a working Open Brain setup before starting any extension. If you haven't done that yet, start with the [Quickstart](/quickstart).
+
+## The learning path
+
+Build these in order. Difficulty increases as you go, but so does what your agent can do.
+
+| # | Extension | What you build | Difficulty |
+|---|-----------|----------------|------------|
+| 1 | Household Knowledge Base | Home facts your agent can recall instantly | Beginner |
+| 2 | Home Maintenance Tracker | Scheduling and history for home upkeep | Beginner |
+| 3 | Family Calendar | Multi-person schedule coordination | Intermediate |
+| 4 | Meal Planning | Recipes, meal plans, shared grocery lists | Intermediate |
+| 5 | Professional CRM | Contact tracking wired into your thoughts | Intermediate |
+| 6 | Job Hunt Pipeline | Application tracking and interview pipeline | Advanced |
+
+## Extensions compound
+
+This is the key idea. These aren't six separate tools — they're one system.
+
+Your CRM knows about thoughts you've captured. Your meal planner checks who's home this week (from the family calendar). Your job hunt contacts automatically become professional network contacts. This is what happens when your agent can see across your whole system.
+
+Some specific examples of how extensions connect:
+
+- The `household_vendors` table from Extension 1 feeds into the maintenance tracker in Extension 2. You can log who did the work.
+- The `family_members` table from Extension 3 is referenced in Extension 4. Your meal planner knows how many people to plan for.
+- The Professional CRM (Extension 5) has a bridge tool — `link_thought_to_contact` — that pulls thoughts from your core Open Brain and surfaces them before meetings.
+- The Job Hunt Pipeline (Extension 6) has `link_contact_to_professional_crm`, which turns recruiters and hiring managers into permanent professional contacts after the search ends.
+
+## Primitives: concepts that compound
+
+Some patterns show up in multiple extensions. Learn them once, apply them everywhere.
+
+| Primitive | What it teaches | Used by |
+|-----------|-----------------|---------|
+| Row Level Security | PostgreSQL policies for multi-user data isolation | Extensions 4, 5, 6 |
+| Shared MCP Server | Giving others scoped access to parts of your brain | Extension 4 |
+
+Row Level Security is introduced in Extension 4 (Meal Planning) so your partner can check the shopping list without seeing your professional contacts or job applications. By the time you reach Extensions 5 and 6, RLS is a habit.
+
+## All six extensions
+
+<CardGroup cols={2}>
+  <Card
+    title="Household Knowledge Base"
+    icon="house"
+    href="/extensions/household-knowledge"
+  >
+    Store paint colors, appliance specs, vendor contacts, and any home fact your agent can recall on demand. Beginner.
+  </Card>
+
+  <Card
+    title="Home Maintenance Tracker"
+    icon="wrench"
+    href="/extensions/home-maintenance"
+  >
+    Recurring task scheduling, completion logging, and auto-calculated next-due dates. Never miss an HVAC filter again. Beginner.
+  </Card>
+
+  <Card
+    title="Family Calendar"
+    icon="calendar"
+    href="/extensions/family-calendar"
+  >
+    Multi-person scheduling with recurring events, important dates, and conflict detection. Intermediate.
+  </Card>
+
+  <Card
+    title="Meal Planning"
+    icon="utensils"
+    href="/extensions/meal-planning"
+  >
+    Recipe collection, weekly meal plans, auto-generated shopping lists, and a shared server for household members. Intermediate.
+  </Card>
+
+  <Card
+    title="Professional CRM"
+    icon="address-book"
+    href="/extensions/professional-crm"
+  >
+    Contact tracking with interaction history, opportunity pipeline, and a bridge that connects your thoughts to the people they're about. Intermediate.
+  </Card>
+
+  <Card
+    title="Job Hunt Pipeline"
+    icon="briefcase"
+    href="/extensions/job-hunt"
+  >
+    Companies, postings, applications, interviews, and contacts — all tracked. Your agent shows you your real conversion rate. Advanced.
+  </Card>
+</CardGroup>

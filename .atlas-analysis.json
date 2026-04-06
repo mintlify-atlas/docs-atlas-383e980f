@@ -1,0 +1,90 @@
+{
+  "projectType": "framework",
+  "projectName": "Open Brain (OB1)",
+  "projectDescription": "Open Brain is a persistent AI memory infrastructure layer — one Supabase database with pgvector, one MCP server, any AI client — that lets Claude, ChatGPT, Cursor, and any other AI share the same searchable knowledge base.",
+  "theme": "palm",
+  "primaryColor": "#848c84",
+  "lightColor": "#161717",
+  "darkColor": "#c9caca",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "quickstart",
+              "ai-assisted-setup",
+              "companion-prompts"
+            ]
+          },
+          {
+            "group": "How It Works",
+            "pages": [
+              "concepts/architecture",
+              "concepts/database-schema",
+              "concepts/mcp-tools"
+            ]
+          },
+          {
+            "group": "Extensions",
+            "pages": [
+              "extensions/overview",
+              "extensions/household-knowledge",
+              "extensions/home-maintenance",
+              "extensions/family-calendar",
+              "extensions/meal-planning",
+              "extensions/professional-crm",
+              "extensions/job-hunt"
+            ]
+          },
+          {
+            "group": "Recipes & Skills",
+            "pages": [
+              "recipes/overview",
+              "recipes/importing-data",
+              "recipes/agent-skills",
+              "recipes/workflows"
+            ]
+          },
+          {
+            "group": "Community",
+            "pages": [
+              "community/integrations",
+              "community/dashboards",
+              "community/contributing",
+              "community/faq"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Single Supabase PostgreSQL + pgvector database as persistent AI memory",
+    "Remote MCP server deployed as Supabase Edge Function — no local servers",
+    "Four MCP tools: search_thoughts, list_thoughts, thought_stats, capture_thought",
+    "Semantic search via 1536-dimensional embeddings (openai/text-embedding-3-small via OpenRouter)",
+    "Auto-metadata extraction (type, topics, people, action items) on every captured thought",
+    "Content fingerprint deduplication with SHA-256 upsert function",
+    "Works with Claude Desktop, ChatGPT, Claude Code, Cursor, Codex, and any MCP client",
+    "Access key authentication via URL query param or x-brain-key header",
+    "Progressive extension learning path (6 curated builds)",
+    "Community recipes for bulk-importing data from Gmail, ChatGPT, Obsidian, X/Twitter, Instagram, and more",
+    "Reusable agent skill packs for Claude Code and similar AI clients",
+    "Community dashboards (SvelteKit and Next.js) with Supabase auth"
+  ],
+  "publicApiSurface": [
+    "MCP tool: search_thoughts(query, limit?, threshold?)",
+    "MCP tool: list_thoughts(limit?, type?, topic?, person?, days?)",
+    "MCP tool: thought_stats()",
+    "MCP tool: capture_thought(content)",
+    "SQL function: match_thoughts(query_embedding, match_threshold, match_count, filter)",
+    "SQL function: upsert_thought(p_content, p_payload)",
+    "SQL table: thoughts (id, content, embedding, metadata, content_fingerprint, created_at, updated_at)",
+    "Auth: x-brain-key header or ?key= query parameter",
+    "Edge Function endpoint: https://<project-ref>.supabase.co/functions/v1/open-brain-mcp"
+  ]
+}

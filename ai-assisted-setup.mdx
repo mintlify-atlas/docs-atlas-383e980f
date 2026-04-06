@@ -1,0 +1,117 @@
+---
+title: "AI-assisted setup"
+description: "Use Cursor, Claude Code, or any AI coding tool to build your Open Brain — same system, different workflow."
+---
+
+Point your AI coding tool at this repo and tell it to walk you through the [setup guide](/quickstart). That's the whole workflow. The guide has every SQL block, every Edge Function, and every config step — your AI reads it and helps you execute each one.
+
+This works in Cursor, Claude Code, Codex, Windsurf, or any AI coding tool that can read files. You don't need to copy-paste from a browser or follow along manually. Let your AI be your pair programmer through the whole build.
+
+<Note>
+  This guide was written because Matt Hallett built his first Open Brain entirely through Cursor with Claude, and it worked. If you build yours with an AI coding tool, [share how it went](https://discord.gg/Cgh9WJEkeG) in the Discord `#show-and-tell` channel.
+</Note>
+
+---
+
+## How to start
+
+<Steps>
+
+<Step title="Clone or open the repo">
+
+Clone the Open Brain repo or open it directly in your AI coding tool:
+
+```bash
+git clone https://github.com/NateBJones-Projects/OB1.git
+```
+
+Then open the folder in Cursor, Claude Code, or your preferred AI coding environment. Your AI needs to be able to read files from the repo — specifically `docs/01-getting-started.md`.
+
+</Step>
+
+<Step title="Give your AI the instruction">
+
+Tell your AI coding tool:
+
+```text
+Read docs/01-getting-started.md and walk me through building my Open Brain step by step.
+```
+
+That's it. Your AI will read the guide, understand the full build, and start walking you through it. It handles the code parts. You handle the clicking — Supabase dashboard, OpenRouter signup, AI client settings.
+
+</Step>
+
+<Step title="Go step by step">
+
+Don't ask your AI to "set up the whole thing." Walk through the guide in order, step by step, testing as you go. The guide is structured this way for a reason — each step builds on the last, and skipping ahead creates configuration problems that are hard to debug.
+
+Test after Step 8 (use it). If capture works, you know your database, Edge Function, and client connection are all solid.
+
+</Step>
+
+<Step title="Use Supabase's built-in AI too">
+
+The Supabase dashboard has its own AI assistant (chat icon, bottom-right of the dashboard). It knows Supabase's documentation inside out and can help with anything database-specific — SQL errors, RLS policy questions, Edge Function logs.
+
+Your coding AI handles the big picture. The Supabase AI handles the Supabase details. Use both.
+
+</Step>
+
+</Steps>
+
+---
+
+## What your AI handles well
+
+Your AI coding tool is genuinely good at these parts of the build:
+
+- **SQL setup** — Creating tables, functions, indexes, and security policies. Your AI can walk you through pasting each block into the Supabase SQL Editor and explain what each one does.
+- **Edge Function code** — The `open-brain-mcp` function is fully written in the guide. Your AI reads it and helps you deploy it — no interpretation required.
+- **CLI commands** — Installing the Supabase CLI, linking your project, deploying functions, setting secrets. If your tool supports terminal access, your AI can run these directly.
+- **Debugging** — When something doesn't work, your AI can read Edge Function logs and help diagnose the issue. This is where the AI-assisted path genuinely shines over going solo.
+
+## What you should do manually
+
+Some steps involve web UIs where your AI can't help directly. These are fast, but you need to do them yourself:
+
+- **Creating accounts** — Supabase, OpenRouter. Sign up in your browser.
+- **Supabase dashboard settings** — Enabling the vector extension, copying your Project URL and Secret key, checking Table Editor.
+- **Connecting AI clients** — Adding the MCP connector in Claude Desktop, ChatGPT, or other clients (Settings menus in each app).
+
+Your AI can tell you exactly what to click and where — it just can't click for you.
+
+---
+
+## Common gotchas
+
+<AccordionGroup>
+
+<Accordion title="Don't let your AI improvise when it can't read the source">
+  If your AI can't access a file or section, it will make something up rather than tell you it's stuck. This happened during early builds when the guide lived on Substack — collapsed code sections weren't visible to the AI, so it invented its own version of the Edge Function code. The invented version was plausible but wrong.
+
+  Now that the full guide lives in this repo, this shouldn't happen — your AI can read everything. But the principle still applies: if your AI is generating setup code from scratch instead of referencing `docs/01-getting-started.md`, stop it and point it back to the file.
+</Accordion>
+
+<Accordion title="Configuration problems need configuration fixes">
+  When something breaks, your AI's instinct is to rewrite code. Resist this. The Edge Function code in the guide works. Problems are almost always configuration:
+
+  - A secret that doesn't match (`supabase secrets list` to check)
+  - A URL that's missing the access key
+  - A step that got skipped
+
+  Check Edge Function logs first (Supabase dashboard → Edge Functions → your function → Logs). Paste the error to your AI and let it diagnose — but don't let it start rewriting the server code unless the logs point to an actual code problem.
+</Accordion>
+
+<Accordion title="Keep your credential tracker open">
+  The setup guide has a credential tracker near the top. Copy it into a text file before you start. Your AI can remind you to fill it in as you go, but you need to actually save the values somewhere it can reference later. If you skip this, you'll hit Step 7 and realize you don't have your project ref from Step 1.
+</Accordion>
+
+</AccordionGroup>
+
+---
+
+## After setup
+
+Once your Open Brain is running, the same AI-assisted workflow applies to extensions and recipes. Point your AI at an extension's README and build together. The [Extensions learning path](https://github.com/NateBJones-Projects/OB1#extensions--the-learning-path) starts with Household Knowledge Base (beginner) and builds up from there.
+
+Check out the [companion prompts](/companion-prompts) next — five prompts that help you migrate your existing AI memories into your new brain, discover your use cases, and build the daily capture habit.

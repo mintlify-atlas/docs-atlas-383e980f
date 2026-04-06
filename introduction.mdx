@@ -1,0 +1,89 @@
+---
+title: "What is Open Brain?"
+description: "A persistent AI memory layer built on Supabase, pgvector, and the MCP protocol — so every AI you use shares the same memory of you."
+---
+
+<Note>
+  Open Brain is not a notes app. It's a database with vector search and an open protocol. Your notes app stores files. Open Brain stores *meaning* — and makes that meaning available to every AI you use, simultaneously.
+</Note>
+
+Open Brain is the infrastructure layer for your thinking. One Supabase database, one remote MCP server (a Supabase Edge Function), and any AI client you already use. Claude, ChatGPT, Cursor, Claude Code, whatever ships next month — they all plug into the same persistent memory of you.
+
+No middleware. No SaaS subscription chains. No Zapier workflows. One brain. All of them.
+
+## How it works
+
+Every thought you capture goes through three operations in parallel:
+
+1. **Embedding** — Your text is converted into a 1536-dimensional vector using `openai/text-embedding-3-small` via OpenRouter. This vector encodes *meaning*, not just keywords.
+2. **Metadata extraction** — A lightweight LLM (`gpt-4o-mini`) extracts structured fields: people mentioned, action items, dates, topics, and type.
+3. **Storage** — Both the embedding and the metadata are stored as a single row in a `thoughts` table in your Supabase database.
+
+When you search, your query gets embedded the same way — then Supabase uses pgvector's cosine similarity to find the stored thoughts whose meaning most closely matches yours. "Sarah's thinking about leaving" and "what did I note about career changes?" match semantically even though they share zero keywords.
+
+## The thoughts table
+
+Everything lives in one table:
+
+```sql
+create table thoughts (
+  id                  uuid default gen_random_uuid() primary key,
+  content             text not null,
+  embedding           vector(1536),
+  metadata            jsonb default '{}'::jsonb,
+  content_fingerprint text,
+  created_at          timestamptz default now(),
+  updated_at          timestamptz default now()
+);
+```
+
+The `embedding` column is the engine. The `metadata` column is the filter layer. The `content_fingerprint` is a SHA-256 hash used to deduplicate — capturing the same thought twice merges the metadata instead of creating a second row.
+
+## The four MCP tools
+
+Your MCP server exposes exactly four tools to any connected AI:
+
+| Tool | What it does |
+|------|-------------|
+| `capture_thought` | Save a new thought — generates embedding and extracts metadata automatically |
+| `search_thoughts` | Semantic search across all captured thoughts by meaning |
+| `list_thoughts` | Browse recent thoughts with filters by type, topic, person, or time range |
+| `thought_stats` | Summary of total thoughts, types, top topics, and people mentioned |
+
+Your AI picks the right tool automatically based on what you ask. You don't need to specify it.
+
+## What you need to build it
+
+Two services, both free to start:
+
+- **[Supabase](https://supabase.com)** — Your database and Edge Function host (free tier)
+- **[OpenRouter](https://openrouter.ai)** — Universal AI gateway for embeddings and metadata extraction (~$5 in credits, lasts months)
+
+No local servers. No Docker. No Node.js process running on your machine. The MCP server is a Supabase Edge Function — it runs in the cloud and connects directly to any AI client that supports remote MCP.
+
+## Supported AI clients
+
+Open Brain connects to any MCP-compatible AI client:
+
+- **Claude Desktop** — Via the native Connectors UI (Settings → Connectors → Add custom connector)
+- **ChatGPT** — Via Apps & Connectors (requires paid plan)
+- **Claude Code** — One `claude mcp add` command
+- **OpenAI Codex** — Via `~/.codex/config.toml`
+- **Cursor, VS Code Copilot, Windsurf** — Via `supergateway` or `mcp-remote` bridge
+
+## Where to go next
+
+<CardGroup cols={2}>
+  <Card title="Build your Open Brain" icon="rocket" href="/quickstart">
+    The full setup guide — database, MCP server, and AI client connection in about 30 minutes.
+  </Card>
+  <Card title="Companion prompts" icon="comments" href="/companion-prompts">
+    Five prompts to migrate your existing memories, discover use cases, and build the daily capture habit.
+  </Card>
+  <Card title="AI-assisted setup" icon="wand-magic-sparkles" href="/ai-assisted-setup">
+    Prefer building with Cursor or Claude Code? Point your AI at this repo and go.
+  </Card>
+  <Card title="Community on Discord" icon="discord" href="https://discord.gg/Cgh9WJEkeG">
+    Real-time help, show-and-tell, and contributor discussion.
+  </Card>
+</CardGroup>

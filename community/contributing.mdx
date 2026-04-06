@@ -1,0 +1,264 @@
+---
+title: "Contributing to Open Brain"
+description: "How to add recipes, skills, schemas, dashboards, and integrations to the OB1 repo — including the non-developer path."
+---
+
+Open Brain is built by the community. Every recipe, skill, schema, dashboard, and integration in the repo was reviewed, approved, and merged. This page covers everything you need to submit your first contribution.
+
+<Note>
+  Before contributing, you need a working Open Brain setup. Every contribution should be tested against your own instance — don't submit something you haven't run yourself.
+</Note>
+
+## You don't need to write code
+
+If you have a workflow, a use case, or an idea — that's a contribution. Here's how the non-developer path works:
+
+1. **Open a [Non-Technical Contribution](https://github.com/NateBJones-Projects/OB1/issues/new?template=non-technical-contribution.yml) issue.** Describe your idea in plain language. Screenshots and examples help.
+2. **A community mentor picks it up.** They'll work with you to shape your idea into a contribution — writing the code, structuring the README, filling in the metadata.
+3. **You get full credit.** Your name goes in the `author` field of `metadata.json` and in `CONTRIBUTORS.md`. The mentor is credited as a co-author in the PR.
+
+You can also post ideas in the `#non-dev-contributions` channel on [Discord](https://discord.gg/Cgh9WJEkeG).
+
+**Other ways to contribute without code:** report bugs or unclear documentation, suggest improvements to existing contributions, test someone else's recipe and confirm it works (or report what broke), share use cases that could become future contributions.
+
+---
+
+## What goes where
+
+| Category | What belongs here | Open or curated? |
+|---|---|---|
+| `extensions/` | Progressive builds that replace SaaS tools with agent-powered infrastructure | **Curated** — discuss with maintainers first |
+| `primitives/` | Reusable concept guides referenced by multiple extensions | **Curated** — must be used by 2+ extensions |
+| `recipes/` | Step-by-step builds that add a new capability | Open |
+| `schemas/` | Database table extensions and metadata schemas | Open |
+| `dashboards/` | Frontend templates for Vercel/Netlify hosting | Open |
+| `integrations/` | MCP extensions, webhooks, capture sources | Open |
+| `skills/` | Reusable AI client skills and prompt packs | Open |
+
+### Understanding the categories
+
+<AccordionGroup>
+  <Accordion title="Extensions">
+    Curated, ordered builds that form a progressive learning path. Each teaches new concepts through practical use. They include database schemas, MCP server code, and step-by-step instructions. If you want to propose a new extension, [open an issue](https://github.com/NateBJones-Projects/OB1/issues/new?template=extension-submission.yml) first — extensions aren't merged without maintainer discussion.
+  </Accordion>
+  <Accordion title="Primitives">
+    Reusable concept guides that get referenced by multiple extensions. They teach a pattern (like Row Level Security or shared access) once, so extensions can link to them instead of re-explaining. A primitive needs to be referenced by at least 2 extensions to justify its existence. [Propose one here](https://github.com/NateBJones-Projects/OB1/issues/new?template=primitive-submission.yml).
+  </Accordion>
+  <Accordion title="Recipes">
+    Standalone builds that add a capability without being part of the learning path. No ordering, no prerequisites beyond a working Open Brain. The most common contribution type — import tools, workflow automations, capture pipelines, daily digests. Open for community contributions.
+  </Accordion>
+  <Accordion title="Skills">
+    Standalone agent behaviors packaged as plain-text prompt files. Smaller than recipes: no full build required, just a reusable behavior you can install into Claude Code, Codex, Cursor, or a similar client. If a skill is reusable across multiple contributions, its canonical home is `skills/`. Recipes can depend on canonical skills via `requires_skills` in `metadata.json`.
+  </Accordion>
+  <Accordion title="Schemas">
+    Database table extensions — new tables, columns, or metadata patterns that add structured data to Open Brain. Include the SQL migration file and document what problem it solves.
+  </Accordion>
+  <Accordion title="Dashboards">
+    Frontend templates for Vercel or Netlify hosting. These are full web applications pointed at your Supabase backend. Include a `package.json` and clear deployment instructions.
+  </Accordion>
+  <Accordion title="Integrations">
+    MCP extensions, webhooks, capture sources, and alternative deployment targets. Broader than recipes — includes bot integrations, browser extensions, calendar sync, and full deployment alternatives like Kubernetes.
+  </Accordion>
+</AccordionGroup>
+
+Not sure where yours fits? Open a discussion issue first.
+
+---
+
+## Required files
+
+Every contribution lives in its own subfolder under the right category (e.g., `recipes/my-recipe/` or `skills/my-skill/`) and must include:
+
+- **`README.md`** — Instructions (see standards below)
+- **`metadata.json`** — Structured metadata (see template below)
+- **Your actual code** — SQL files, edge function code, frontend code, config files, whatever it takes
+
+<Warning>
+  No credentials, API keys, or secrets in any file. The automated review will reject them. Use environment variables and document what the user needs to set.
+</Warning>
+
+---
+
+## README standards
+
+Every contribution's README must include these five sections:
+
+<AccordionGroup>
+  <Accordion title="1. What it does">
+    One to two sentences. What capability does this add to Open Brain? Be specific about what changes in the system after following these instructions.
+  </Accordion>
+  <Accordion title="2. Prerequisites">
+    What the user needs before starting. Always include "Working Open Brain setup." Add anything beyond that: specific API keys, runtimes (Node.js 18+), external services, or prior extensions.
+  </Accordion>
+  <Accordion title="3. Step-by-step instructions">
+    Numbered steps, copy-paste ready where possible. Don't skip steps. Don't assume knowledge beyond what's in the prerequisites. Every major step should end with a `✅ Done when:` line telling the user exactly what to check before moving on.
+  </Accordion>
+  <Accordion title="4. Expected outcome">
+    What should the user see when it's working? Be specific: which table has data, what the AI client returns, what the UI looks like.
+  </Accordion>
+  <Accordion title="5. Troubleshooting">
+    At least 2–3 common issues and how to fix them. Think about what actually goes wrong during setup — misconfigured secrets, missing permissions, wrong channel IDs — and write the fix for each one.
+  </Accordion>
+</AccordionGroup>
+
+### Extension-specific requirements
+
+Extensions have additional required sections:
+- **"Why This Matters"** — lead with the human problem this solves
+- **"Learning Path"** — table showing position in the 6-extension sequence
+- **"What You'll Learn"** — new concepts introduced
+- **"Cross-Extension Integration"** — connections to other extensions
+- **"Next Steps"** — link to the next extension
+- **Tool audit link** — link to the [MCP Tools reference](/concepts/mcp-tools)
+- **Remote MCP pattern** — MCP servers must be deployed as Supabase Edge Functions, connected via custom connectors (URL-based). No local Node.js stdio servers.
+
+---
+
+## metadata.json
+
+Every contribution needs a `metadata.json` file:
+
+```json
+{
+  "name": "Email History Import",
+  "description": "Import your Gmail email history into Open Brain as searchable thoughts with sender, subject, and date metadata.",
+  "category": "recipes",
+  "author": {
+    "name": "Matt Hallett",
+    "github": "matthallett"
+  },
+  "version": "1.0.0",
+  "requires": {
+    "open_brain": true,
+    "services": ["Gmail API"],
+    "tools": ["Node.js 18+"]
+  },
+  "requires_skills": [],
+  "tags": ["email", "gmail", "import", "history"],
+  "difficulty": "intermediate",
+  "estimated_time": "30 minutes",
+  "created": "2026-03-10",
+  "updated": "2026-03-10"
+}
+```
+
+**Required fields:** `name`, `description`, `category`, `author.name`, `version`, `requires.open_brain` (must be `true`), `tags` (at least 1), `difficulty` (`beginner`, `intermediate`, or `advanced`), `estimated_time`
+
+**Optional fields:** `author.github`, `requires.services`, `requires.tools`, `requires_skills`, `requires_primitives`, `created`, `updated`
+
+**Extension-only field:** `learning_order` — integer position in the 6-extension learning path
+
+The `metadata.json` format is validated against a [JSON Schema](https://github.com/NateBJones-Projects/OB1/blob/main/.github/metadata.schema.json) during the automated PR review.
+
+---
+
+## Contribution workflow
+
+<Steps>
+  <Step title="Build and test your contribution">
+    Test everything against your own Open Brain instance. Don't submit something you haven't run yourself.
+  </Step>
+
+  <Step title="Create your branch">
+    Use the branch convention: `contrib/<github-username>/<short-description>`
+
+    ```bash
+    git checkout -b contrib/yourusername/gmail-import
+    ```
+  </Step>
+
+  <Step title="Create your contribution folder">
+    Add your files under the right category. Every contribution needs `README.md` and `metadata.json` at minimum.
+
+    ```text
+    recipes/
+    └── email-history-import/
+        ├── README.md
+        ├── metadata.json
+        └── import.js
+    ```
+  </Step>
+
+  <Step title="Submit the PR">
+    Title format: `[category] Short description`
+
+    Examples:
+    - `[recipes] Email history import via Gmail API`
+    - `[schemas] CRM contacts table with interaction tracking`
+    - `[skills] Panning for Gold standalone skill pack`
+    - `[integrations] Discord bot capture`
+
+    Your PR description must include what the contribution does, what it requires, and confirmation that you tested it on your own Open Brain instance.
+  </Step>
+
+  <Step title="Automated review runs">
+    A GitHub Action checks 15 rules automatically (see below). All must pass before human review. If any fail, the checks output tells you exactly what to fix.
+  </Step>
+
+  <Step title="Human review">
+    If automated checks pass, a human admin reviews for quality, clarity, and safety. Expect 2–5 business days.
+  </Step>
+</Steps>
+
+---
+
+## The automated review
+
+Every PR is checked against these 15 rules before a human reviews it:
+
+<AccordionGroup>
+  <Accordion title="Structure and files">
+    1. **Folder structure** — Contribution is in the correct category directory
+    2. **Required files** — Both `README.md` and `metadata.json` exist in the contribution folder
+    3. **Metadata valid** — `metadata.json` parses as valid JSON and passes the repo JSON Schema
+    4. **Category-specific artifacts** — Recipes have code or detailed instructions; schemas have SQL files; dashboards have frontend code or `package.json`; skills have at least one plain-text skill file; primitives have substantial READMEs (200+ words)
+  </Accordion>
+  <Accordion title="Safety checks">
+    5. **No credentials** — No API keys, tokens, passwords, or secrets in any file
+    6. **SQL safety** — No `DROP TABLE`, `DROP DATABASE`, `TRUNCATE`, or unqualified `DELETE FROM`. No modifications to core `thoughts` table columns (adding columns is fine; altering or dropping existing ones is not)
+    7. **No binary blobs** — No files over 1MB, no `.exe`, `.dmg`, `.zip`, `.tar.gz`
+  </Accordion>
+  <Accordion title="Format and documentation">
+    8. **PR format** — Title starts with a valid category tag: `[recipes]`, `[schemas]`, `[dashboards]`, `[integrations]`, `[skills]`, `[primitives]`, or `[extensions]`
+    9. **README completeness** — Contribution README includes Prerequisites, step-by-step instructions, and expected outcome sections
+    10. **Internal links** — All relative links in READMEs resolve to existing files
+    11. **Scope check** — All changes are within the contribution folder(s)
+  </Accordion>
+  <Accordion title="Dependencies and patterns">
+    12. **Contribution dependencies** — If a contribution declares `requires_primitives` or `requires_skills`, those folders must exist in the repo and be linked in the README
+    13. **Remote MCP pattern** — Extensions and integrations must use remote MCP via Supabase Edge Functions. No `claude_desktop_config.json`, no local Node.js stdio servers
+    14. **Tool audit link** — Extensions and integrations must link to the MCP Tool Audit & Optimization Guide
+    15. **LLM clarity review** — *(Planned for v2)* Automated check that instructions are clear and complete
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## What gets rejected
+
+- Contains credentials, API keys, or secrets
+- Requires paid services with no free-tier alternative
+- Poorly documented (missing README sections, unclear instructions)
+- Duplicates an existing contribution without meaningful improvement
+- Modifies core Open Brain infrastructure (the `thoughts` table structure, the core MCP server) — that's upstream, not here
+
+---
+
+## Contributor ladder
+
+| Level | What it means | How you get here |
+|---|---|---|
+| **Community Member** | You use Open Brain and participate in discussions | Show up — ask questions, report bugs, share ideas |
+| **Contributor** | You've had at least one contribution merged (code or non-code) | Submit a PR (or have a mentor submit one with your attribution) that gets merged |
+| **Regular** | You're a consistent, trusted contributor | 3+ merged contributions, or sustained help reviewing/testing others' work |
+| **Maintainer** | You help review PRs, mentor new contributors, and shape the project | Invited by existing maintainers based on sustained, quality involvement |
+
+Non-code contributions count at every level. Testing recipes, mentoring non-technical contributors, improving documentation, and triaging issues all count toward progression.
+
+---
+
+## Get help
+
+- **[Discord](https://discord.gg/Cgh9WJEkeG)** — Real-time help in `#non-dev-contributions` and the general contributor channels
+- **[GitHub Issues](https://github.com/NateBJones-Projects/OB1/issues)** — Open a discussion issue if you're unsure where your contribution fits
+- **[CONTRIBUTING.md](https://github.com/NateBJones-Projects/OB1/blob/main/CONTRIBUTING.md)** — The authoritative source for contribution rules, metadata format, and the full review process

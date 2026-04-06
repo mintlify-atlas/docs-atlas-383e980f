@@ -1,0 +1,282 @@
+---
+title: "Workflow recipes"
+description: "Standalone capabilities that make your Open Brain smarter: Auto-Capture, Panning for Gold, Claudeception, Life Engine, Daily Digest, and more."
+---
+
+Workflow recipes go beyond data import. Each one adds a new active capability to your Open Brain — something that runs, routes, synthesizes, or delivers, rather than just ingesting. They are standalone builds: no ordering, no dependency between recipes.
+
+All recipes require a working Open Brain setup. Start with the [getting started guide](/quickstart) if you haven't built one yet.
+
+## Workflow recipes
+
+<AccordionGroup>
+
+  <Accordion title="Auto-Capture Protocol">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+Automatically captures evaluated ideas and session summaries to Open Brain when a work session ends. No manual step. No toggle. The system closes its own loop.
+
+This recipe teaches you how to use the reusable [Auto-Capture skill](/recipes/agent-skills#auto-capture-skill-pack) as part of an Open Brain workflow. The skill handles the behavior at session close; the recipe defines what gets captured, what does not, and how captures compose with Panning for Gold.
+
+**How it fits into a workflow:**
+
+```
+Brainstorm / Work Session
+    ↓
+Panning for Gold (evaluate + triage)
+    ↓
+Auto-Capture (store to Open Brain)
+    ↓
+Future sessions find these via search_thoughts
+```
+
+**What gets captured:**
+- Each ACT NOW item as its own thought — what the idea is, why it matters, concrete next actions, and provenance
+- One session summary recording themes and the number of important items that emerged
+
+**What does not get captured:**
+- Raw brainstorming or transcript text
+- Parked or killed items
+- Obvious duplicates of thoughts already in Open Brain
+
+**Prerequisites**
+- Working Open Brain with a capture tool available
+- Claude Code or another AI client that supports reusable skills
+- The [Auto-Capture skill pack](/recipes/agent-skills#auto-capture-skill-pack) installed
+
+**Requires:** [Auto-Capture skill pack](https://github.com/NateBJones-Projects/OB1/tree/main/skills/auto-capture)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/auto-capture) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Panning for Gold">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+Mine brain dumps and voice transcripts for actionable ideas. The recipe is built on the Panning for Gold skill pack, battle-tested across 13+ real sessions, and designed to extract signal from the messiest, most stream-of-consciousness input.
+
+The workflow runs in two stages: extract every thread from the raw input first, then evaluate the highest-signal ones with explicit verdicts — ACT NOW, research thread, park, or kill. Outputs are written to disk so nothing gets lost between agent runs or session compaction.
+
+**What you get:**
+- A numbered thread inventory covering every idea in the raw input (no category filtering — personal and technical threads both get extracted)
+- Evaluated verdicts on the most important threads
+- A final gold-found synthesis file
+
+**Prerequisites**
+- Working Open Brain setup
+- Claude Code or another AI client that supports reusable skills
+- The [Panning for Gold skill pack](/recipes/agent-skills#panning-for-gold-skill-pack) installed
+- A workspace where the skill can write permanent files
+
+**Requires:** [Panning for Gold skill pack](https://github.com/NateBJones-Projects/OB1/tree/main/skills/panning-for-gold)
+
+<Tip>
+  Combine Panning for Gold with Auto-Capture for a complete knowledge flywheel: Panning for Gold extracts and evaluates, Auto-Capture stores the ACT NOW items at session close.
+</Tip>
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/panning-for-gold) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Claudeception">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+A self-improving system that creates new skills from work sessions. The recipe walks you through using the Claudeception skill so that hard-won discoveries — debugging breakthroughs, non-obvious workarounds, undocumented behavior — get turned into new reusable skills instead of disappearing at session end.
+
+The name captures the idea: skills that extract lessons to create other skills. Over time, your skill library grows from your actual work rather than from templates.
+
+**What you get:**
+- A structured process for identifying which session discoveries are worth preserving
+- A new skill file written to your skills directory
+- An Open Brain capture so future sessions can search for and find the new skill
+
+**Prerequisites**
+- Working Open Brain setup
+- Claude Code or another AI client that supports reusable skills
+- The [Claudeception skill pack](/recipes/agent-skills#claudeception-skill-pack) installed
+
+**Requires:** [Claudeception skill pack](https://github.com/NateBJones-Projects/OB1/tree/main/skills/claudeception)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/claudeception) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Schema-Aware Routing">
+
+**Contributor:** [@claydunker-yalc](https://github.com/claydunker-yalc)
+
+LLM-powered routing that distributes unstructured text across multiple database tables. Instead of forcing every thought into the same `thoughts` table, this recipe lets you describe your schema to the LLM and have it decide which table a given piece of content belongs in.
+
+Useful when your Open Brain has grown to include extension tables (contacts, meals, home records) and you want a single capture interface that routes intelligently rather than requiring you to specify the destination each time.
+
+**What you get:**
+- A routing layer that reads your schema and classifies incoming content
+- Clean separation of content across your different extension tables
+- A single capture workflow that handles multiple destinations
+
+**Prerequisites**
+- Working Open Brain setup with at least one extension table beyond `thoughts`
+- OpenRouter API key (for LLM routing decisions)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/schema-aware-routing) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Life Engine">
+
+**Contributor:** [@justfinethanku](https://github.com/justfinethanku)
+
+A self-improving, time-aware personal assistant that runs in the background via Claude Code's `/loop` command. It checks your calendar, surfaces relevant knowledge from your Open Brain, tracks habits and health check-ins, and delivers proactive briefings via Telegram or Discord — adapting to your life over time.
+
+You run one command:
+
+```
+/loop 30m /life-engine
+```
+
+Every 30 minutes, Claude wakes up, checks the time, and decides what you need right now:
+
+| Time | What happens |
+|------|-------------|
+| 7:00 AM | Pulls your calendar, gives you a daily rundown, reminds you about morning habits |
+| 9:30 AM | Upcoming client call — queries Open Brain for that client's history, sends a prep briefing |
+| 12:00 PM | No meetings — sends a quick check-in prompt |
+| 6:00 PM | Day summary: meetings attended, tasks completed, habits tracked |
+
+**The self-improvement loop:** After 7 days of data, Life Engine reviews its own performance — which briefings you responded to, which you ignored, what you kept asking for manually — and proposes one change via Telegram. You approve or reject. The skill evolves.
+
+**Prerequisites**
+- Working Open Brain setup
+- Claude Code installed
+- Google Calendar MCP connected to Claude Code
+- Telegram account and a bot created via [@BotFather](https://t.me/BotFather) (or a Discord server)
+- Bun installed (`brew install oven-sh/bun/bun`)
+
+**Outcome:**
+- Proactive morning briefings on your phone
+- Automatic meeting prep with context from your Open Brain
+- Habit tracking with reminders and completion logging
+- Mood and health check-ins logged to your database
+- Evening day summaries
+- A self-improving system that suggests its own enhancements weekly
+
+<Warning>
+  Life Engine requires Claude Code. It uses Claude Code-specific features — skills, the `/loop` command, and the `--channels` flag — that are not available in other AI clients.
+</Warning>
+
+<Note>
+  Life Engine will not be perfect on day one. Start with just calendar and Telegram, confirm the morning briefing works, then add habits and check-ins in week two. The value comes from the feedback loop over time, not the initial setup.
+</Note>
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/life-engine) for the full setup guide, including the complete skill file, schema SQL, and permission configuration.
+
+  </Accordion>
+
+  <Accordion title="Life Engine Video">
+
+**Contributor:** [@justfinethanku](https://github.com/justfinethanku)
+
+An add-on to Life Engine that renders briefings as short animated videos with voiceover instead of text messages. Uses Remotion to generate a video composition from briefing data, then sends the rendered video as a file attachment via the Telegram channel.
+
+**Prerequisites**
+- Life Engine fully set up and running
+- Remotion installed
+- A TTS API (ElevenLabs or similar) for voiceover generation
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/life-engine-video) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Daily Digest">
+
+**Contributor:** OB1 Team
+
+An automated daily summary of your recent thoughts, delivered via email or Slack. A Supabase Edge Function runs on a cron schedule, queries your most recent thoughts, groups them by topic, and sends a formatted digest. You wake up to a summary of everything your brain captured the day before.
+
+**What the digest includes:**
+- A count of thoughts captured in the last 24 hours
+- Top themes grouped by similarity
+- 2–3 highlight thoughts that are most unique or interesting
+- A brief AI-generated narrative connecting the day's thinking
+
+**Prerequisites**
+- Working Open Brain setup
+- Supabase CLI installed (`npm i -g supabase`)
+- OpenRouter API key
+- A delivery method: Resend or SendGrid free tier (email), or an existing Slack webhook
+
+**Setup**
+
+<Steps>
+  <Step title="Deploy the edge function">
+    Copy the recipe folder into your Supabase project's `supabase/functions/` directory, then deploy:
+    ```bash
+    supabase functions deploy daily-digest
+    ```
+  </Step>
+  <Step title="Configure environment variables">
+    Set your delivery method credentials (email API key or Slack webhook URL) plus your Supabase and OpenRouter keys.
+  </Step>
+  <Step title="Set up the cron trigger">
+    Enable the `pg_cron` extension in Supabase (Database → Extensions → pg_cron) and configure the schedule.
+  </Step>
+  <Step title="Test">
+    Invoke the function manually and verify you receive the digest at your chosen destination.
+  </Step>
+</Steps>
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/daily-digest) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Research-to-Decision Workflow">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+A composition recipe that chains five canonical skill packs into structured research and decision workflows. This recipe does not duplicate the skill logic — the skills are the source of truth for behavior. The recipe defines install order, workspace structure, handoff rules, skip rules, and two recommended paths from raw inputs to a reusable decision artifact.
+
+**Two paths:**
+
+*Operator path* — for strategic briefs, GTM recommendations, partnership views, and internal decision support:
+```
+competitive-analysis → research-synthesis → meeting-synthesis
+```
+
+*Investor path* — for memos, IC-style recommendations, and diligence packages:
+```
+competitive-analysis → financial-model-review → research-synthesis → meeting-synthesis → deal-memo-drafting
+```
+
+**Each step produces a clean artifact for the next:**
+- `competitive-analysis` → market and competitor brief
+- `financial-model-review` → model review memo with red flags and scenario notes
+- `research-synthesis` → source-backed synthesis with contradictions and confidence markers
+- `meeting-synthesis` → decision log, action list, open questions, and follow-up notes
+- `deal-memo-drafting` → final recommendation memo
+
+**You don't need every step every time.** Skip `financial-model-review` if there is no model. Skip `meeting-synthesis` if there is no call feeding the decision. Skip `deal-memo-drafting` if the deliverable is a strategy brief rather than a memo.
+
+**Prerequisites**
+- Working Open Brain setup
+- Claude Code or another AI client that supports reusable skills
+- All five canonical skill packs installed:
+  - [Competitive Analysis](/recipes/agent-skills#competitive-analysis-skill-pack)
+  - [Financial Model Review](/recipes/agent-skills#financial-model-review-skill-pack)
+  - [Deal Memo Drafting](/recipes/agent-skills#deal-memo-drafting-skill-pack)
+  - [Research Synthesis](/recipes/agent-skills#research-synthesis-skill-pack)
+  - [Meeting Synthesis](/recipes/agent-skills#meeting-synthesis-skill-pack)
+
+**Capture only the durable outputs:** strong competitive briefs, durable research findings, real decisions from meeting synthesis, and the final memo or recommendation. Do not capture raw packet noise just because it passed through the workflow.
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/research-to-decision-workflow) for the full workspace template and handoff guide.
+
+  </Accordion>
+
+</AccordionGroup>
+
+## Full recipe list
+
+The complete list of workflow and tool recipes is in the [`/recipes`](https://github.com/NateBJones-Projects/OB1/tree/main/recipes) folder of the OB1 repository. New community contributions are added regularly — check the folder directly for the latest.

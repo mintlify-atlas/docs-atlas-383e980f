@@ -1,0 +1,337 @@
+---
+title: "Importing your data"
+description: "Pull your ChatGPT history, Gmail, Obsidian vault, X/Twitter exports, and more into Open Brain as searchable, embedded thoughts."
+---
+
+Every import recipe follows the same pattern: parse a data source, filter out noise, generate vector embeddings, and insert into your `thoughts` table. The result is a semantically searchable record of your digital history — accessible from any MCP-connected AI.
+
+All recipes require a working Open Brain setup. Start with the [getting started guide](/quickstart) if you haven't built one yet.
+
+## Import recipes
+
+<AccordionGroup>
+
+  <Accordion title="ChatGPT conversation import">
+
+**Contributor:** [@matthallett1](https://github.com/matthallett1)
+
+Parses your ChatGPT data export, filters out trivial conversations (poems, one-liners, image requests), uses an LLM to distill each remaining conversation into 1–3 standalone thoughts, and loads them into your Open Brain with vector embeddings and metadata. The result is semantically searchable knowledge extracted from every meaningful ChatGPT conversation you've ever had.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your ChatGPT data export (Settings → Data Controls → Export Data in ChatGPT)
+- Python 3.10+
+- Supabase project URL and service role key
+- OpenRouter API key
+
+**Setup**
+
+<Steps>
+  <Step title="Export your data from ChatGPT">
+    Go to ChatGPT → Settings → Data Controls → Export Data. You'll receive an email with a download link. Download the zip file.
+  </Step>
+  <Step title="Install dependencies">
+    ```bash
+    cd recipes/chatgpt-conversation-import
+    pip install -r requirements.txt
+    ```
+  </Step>
+  <Step title="Set environment variables">
+    ```bash
+    export SUPABASE_URL=https://YOUR_PROJECT_REF.supabase.co
+    export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    export OPENROUTER_API_KEY=sk-or-v1-your-key
+    ```
+  </Step>
+  <Step title="Run a dry run first">
+    ```bash
+    python import-chatgpt.py path/to/chatgpt-export.zip --dry-run --limit 10
+    ```
+    This parses, filters, and summarizes 10 conversations without writing anything to your database. Review the output before committing to a full import.
+  </Step>
+  <Step title="Run the full import">
+    ```bash
+    python import-chatgpt.py path/to/chatgpt-export.zip
+    ```
+    The script extracts conversations from the zip, filters trivial ones, summarizes survivors via LLM, generates embeddings, and inserts into your `thoughts` table. A sync log (`chatgpt-sync-log.json`) tracks what's been imported so re-runs never duplicate data.
+  </Step>
+  <Step title="Verify">
+    Open Supabase → Table Editor → `thoughts`. New rows should have `content` prefixed with `[ChatGPT: title | date]` and `metadata` including `source: "chatgpt"`.
+  </Step>
+</Steps>
+
+**How it works**
+
+The pipeline runs in three stages:
+
+1. **Filtering** — Each conversation passes through 6 filters: already imported, too few messages (\<4), too little user text (\<20 words), title patterns (poems, jokes, image generation), do-not-remember flags, and date range.
+2. **Summarization** — Surviving conversations go to an LLM (gpt-4o-mini by default via OpenRouter). The LLM extracts 1–3 standalone thoughts per conversation, focusing on decisions, relationships, strategies, and lessons learned.
+3. **Ingestion** — Each thought gets a vector embedding (`text-embedding-3-small`, 1536 dimensions) and is inserted with metadata linking back to the original conversation.
+
+**Cost estimate**
+
+From a real production run with ~2 years of history:
+
+| Metric | Value |
+|--------|-------|
+| Conversations scanned | 741 |
+| Filtered as trivial | 437 (59%) |
+| Thoughts generated | 589 |
+| Estimated API cost | $0.08 |
+
+Use `--model ollama --ollama-model qwen3` to run summarization locally and avoid sending conversations to OpenRouter.
+
+  </Accordion>
+
+  <Accordion title="Email history import (Gmail)">
+
+**Contributor:** [@matthallett1](https://github.com/matthallett1)
+
+Pulls your Gmail history via the Gmail API, filters out noise (receipts, auto-replies, no-reply senders), and loads each email into Open Brain as a single thought with LLM-extracted metadata. Once imported, your AI can recall what you said to someone three months ago, find pricing discussions from last quarter, or surface commitments you forgot about.
+
+**Prerequisites**
+- Working Open Brain setup
+- Deno runtime installed
+- Google Cloud project with Gmail API enabled
+- Gmail API OAuth credentials (Client ID + Client Secret)
+- OpenRouter API key
+
+**Setup**
+
+<Steps>
+  <Step title="Enable Gmail API">
+    In your Google Cloud project, enable the Gmail API and create OAuth 2.0 credentials (Desktop app type). Download the credentials file as `credentials.json` into the recipe folder.
+  </Step>
+  <Step title="Set environment variables">
+    ```bash
+    export SUPABASE_URL=https://YOUR_REF.supabase.co
+    export SUPABASE_SERVICE_ROLE_KEY=your-service-role-key
+    export OPENROUTER_API_KEY=sk-or-v1-your-key
+    ```
+  </Step>
+  <Step title="First run — authenticate">
+    ```bash
+    deno run --allow-net --allow-read --allow-write --allow-env pull-gmail.ts --dry-run --limit=5
+    ```
+    This opens a browser window for OAuth consent. After authorizing, your token is cached in `token.json`.
+  </Step>
+  <Step title="Preview and import">
+    ```bash
+    # Dry run — see what would be imported
+    deno run --allow-net --allow-read --allow-write --allow-env pull-gmail.ts --dry-run
+
+    # Import sent emails from the last 90 days
+    deno run --allow-net --allow-read --allow-write --allow-env pull-gmail.ts --window=90d --limit=500
+
+    # Import starred emails
+    deno run --allow-net --allow-read --allow-write --allow-env pull-gmail.ts --labels=STARRED
+    ```
+  </Step>
+</Steps>
+
+**What gets filtered out**
+
+- Auto-generated emails (receipts, confirmations, password resets)
+- No-reply and notification senders
+- Emails with fewer than 10 words after cleanup
+- Quoted replies and signatures are stripped before ingestion
+
+**Expected outcome**
+
+Each imported email becomes one row in `thoughts`:
+- `content`: email body with a `[Email from X | Subject: Y | Date: Z]` prefix
+- `embedding`: 1536-dim vector for semantic search
+- `metadata`: LLM-extracted topics, type, people, action items, plus `source: "gmail"`, `gmail_id`, `gmail_labels`, `gmail_thread_id`
+- `content_fingerprint`: SHA-256 hash for deduplication
+
+<Warning>
+  Make sure your OAuth redirect URI in Google Cloud Console is set to `http://localhost:3847/callback` or the authentication flow will fail.
+</Warning>
+
+  </Accordion>
+
+  <Accordion title="Obsidian vault import">
+
+**Contributor:** [@snapsynapse](https://github.com/snapsynapse)
+
+Parses every markdown note in your Obsidian vault — including frontmatter tags, dates, and wikilinks — chunks long notes into atomic thoughts, generates vector embeddings, and inserts everything into your `thoughts` table. Works with any organizational pattern: PARA, LYT, Zettelkasten, LifeHQ, FLAP, or your own structure.
+
+**Prerequisites**
+- Working Open Brain setup
+- Python 3.10+
+- Supabase project URL and API key
+- OpenRouter API key
+- Optionally: a `content_fingerprint` unique index for database-level dedup
+
+**Setup**
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    cd recipes/obsidian-vault-import
+    pip install -r requirements.txt
+    ```
+  </Step>
+  <Step title="Create your .env file">
+    ```bash
+    cp .env.example .env
+    ```
+    Fill in your Supabase URL, API key, and OpenRouter API key.
+  </Step>
+  <Step title="Run a dry run">
+    ```bash
+    python import-obsidian.py /path/to/your/vault --dry-run --verbose
+    ```
+    This scans your vault, shows how many notes pass filters, flags notes that might contain secrets, and estimates the number of thoughts that would be generated — without inserting anything.
+  </Step>
+  <Step title="Start with a small batch">
+    ```bash
+    python import-obsidian.py /path/to/your/vault --limit 20 --verbose
+    ```
+    The script runs a preflight check before any import — verifying your Supabase connection and OpenRouter API key.
+  </Step>
+  <Step title="Run the full import">
+    ```bash
+    python import-obsidian.py /path/to/your/vault --verbose
+    ```
+  </Step>
+  <Step title="Verify in Supabase">
+    Open Supabase → Table Editor → `thoughts`. Rows should have an `[Obsidian: Title | Folder]` prefix in `content`, a 1536-dim embedding, and metadata with `source`, `title`, `folder`, `tags`, `date`, and `wikilinks`.
+  </Step>
+</Steps>
+
+**Chunking strategy**
+
+1. Short notes (under 500 words) become a single thought.
+2. Notes with headings are split at `##` boundaries — each section becomes one thought.
+3. Long sections (over 1000 words) are sent to an LLM (gpt-4o-mini) to distill into 1–3 standalone thoughts.
+
+Use `--no-llm` to skip step 3 and avoid LLM costs. Use `--no-secret-scan` only if the scanner is producing false positives — it catches API keys, tokens, and connection strings before they reach your database.
+
+**Cost estimate**
+
+| Vault size | Embeddings only (`--no-llm`) | With LLM chunking |
+|------------|------------------------------|---------------------|
+| 100 notes  | ~$0.02                       | ~$0.15              |
+| 500 notes  | ~$0.10                       | ~$0.75              |
+| 1000+ notes | ~$0.20                      | ~$1.50              |
+
+  </Accordion>
+
+  <Accordion title="Perplexity conversation import">
+
+**Contributor:** [@demarant](https://github.com/demarant)
+
+Imports your Perplexity AI search history and memory entries into Open Brain. If you use Perplexity as a research tool, this brings your past searches and their context into your persistent memory.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your Perplexity data export
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/perplexity-conversation-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="X/Twitter import">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Imports tweets, DMs, and Grok chats from your X data export. Covers your entire public and private posting history on the platform.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your X/Twitter data export (Settings → Your account → Download an archive of your data)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/x-twitter-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Instagram import">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Imports DMs, comments, and captions from your Instagram data export. Captures both your written content and your private message history.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your Instagram data export (Settings → Your activity → Download your information)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/instagram-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Google activity import">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Imports Google Search history, Gmail metadata, Maps activity, YouTube watch history, and Chrome browsing history from a Google Takeout export. One of the broadest import recipes — covers your entire Google footprint.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your Google Takeout export (myaccount.google.com/data-and-privacy → Download your data)
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/google-activity-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Grok (xAI) import">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Imports Grok conversation exports with proper handling of MongoDB-style date fields. If you use xAI's Grok for research or conversation, this brings that history into your memory layer.
+
+**Prerequisites**
+- Working Open Brain setup
+- Your Grok conversation export from xAI
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/grok-export-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Journals/Blogger import">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Parses Atom XML blog archives from Blogger or Google Journals and imports them as thoughts. If you have years of personal writing in a Blogger export, this recipe makes it searchable.
+
+**Prerequisites**
+- Working Open Brain setup
+- Atom XML export from Blogger or Google Journals
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/journals-blogger-import) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Fingerprint dedup backfill">
+
+**Contributor:** [@alanshurafa](https://github.com/alanshurafa)
+
+Backfills SHA-256 content fingerprints on existing thoughts that were imported before the fingerprinting primitive was available, then safely removes duplicate rows. Run this after any large import if you suspect duplicates from earlier runs.
+
+**Prerequisites**
+- Working Open Brain setup
+- Existing thoughts in your database
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/fingerprint-dedup-backfill) for full instructions.
+
+  </Accordion>
+
+  <Accordion title="Source filtering">
+
+**Contributor:** [@matthallett1](https://github.com/matthallett1)
+
+Filters thoughts by source value and backfills missing metadata for early imports. If you ran import recipes before metadata fields were standardized, this recipe lets you clean up and normalize the source labels across your entire database.
+
+**Prerequisites**
+- Working Open Brain setup
+- Existing thoughts with incomplete or missing metadata
+
+See the [recipe folder](https://github.com/NateBJones-Projects/OB1/tree/main/recipes/source-filtering) for full instructions.
+
+  </Accordion>
+
+</AccordionGroup>
+
+<Note>
+  All import recipes use content fingerprinting (SHA-256) to prevent duplicate rows. Re-running any import after a new data export will only process content that isn't already in your database.
+</Note>

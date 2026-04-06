@@ -1,0 +1,135 @@
+---
+title: "Architecture"
+description: "How Open Brain's three-layer architecture connects your database, MCP server, and AI clients."
+---
+
+Open Brain is built from three layers that work together: a Supabase PostgreSQL database that stores your thoughts, a Deno Edge Function that exposes those thoughts over the MCP protocol, and any MCP-compatible AI client that reads and writes through it. There are no local servers, no daemons, and no background processes.
+
+## The three layers
+
+<CardGroup cols={3}>
+  <Card title="Supabase database" icon="database">
+    PostgreSQL with the pgvector extension. Stores thought content, 1536-dimensional embeddings, LLM-extracted metadata, and SHA-256 content fingerprints. Exposes a REST API and RPC functions automatically.
+  </Card>
+  <Card title="MCP Edge Function" icon="server">
+    A Deno process running inside Supabase's edge network. Implements the MCP protocol via Hono + StreamableHTTP transport. Handles auth, calls OpenRouter for embeddings and metadata, and reads/writes Supabase over the service role key.
+  </Card>
+  <Card title="AI clients" icon="microchip">
+    Any MCP-compatible client — Claude Desktop, ChatGPT, Claude Code, Codex, Cursor. Connects to the Edge Function over HTTPS using your access key. Calls four tools: `capture_thought`, `search_thoughts`, `list_thoughts`, `thought_stats`.
+  </Card>
+</CardGroup>
+
+## Capturing a thought
+
+When an AI client calls `capture_thought`, the following sequence runs:
+
+```text
+AI client → capture_thought(content)
+  │
+  ├─► OpenRouter embeddings API        ─── parallel ───►  openai/text-embedding-3-small
+  │     └─ returns float[1536]                              (1536 dimensions)
+  │
+  └─► OpenRouter chat completions API  ─── parallel ───►  openai/gpt-4o-mini
+        └─ returns JSON metadata                           (type, topics, people,
+                                                           action_items, dates_mentioned)
+
+Both results arrive → upsert_thought(content, metadata) called via Supabase RPC
+  └─ SHA-256 fingerprint computed from normalized content
+  └─ INSERT with conflict detection on fingerprint
+     └─ if duplicate: merges metadata instead of inserting
+  └─ embedding written to thoughts.embedding
+
+→ confirmation string returned to AI client
+```
+
+The embedding generation and metadata extraction run in parallel via `Promise.all`. This is the hot path — both OpenRouter calls happen concurrently before anything is written to the database.
+
+```typescript
+const [embedding, metadata] = await Promise.all([
+  getEmbedding(content),
+  extractMetadata(content),
+]);
+```
+
+## Searching thoughts
+
+When an AI client calls `search_thoughts`, the path is shorter:
+
+```text
+AI client → search_thoughts(query, limit, threshold)
+  │
+  └─► OpenRouter embeddings API
+        └─ returns float[1536] for the query string
+
+→ supabase.rpc("match_thoughts", { query_embedding, match_threshold, match_count })
+    └─ HNSW index on thoughts.embedding (cosine ops)
+    └─ 1 - (embedding <=> query_embedding) > threshold
+    └─ ORDER BY cosine distance ASC
+    └─ LIMIT match_count
+
+→ results returned ranked by semantic similarity (0.0 – 1.0)
+```
+
+The `<=>` operator is pgvector's cosine distance. The `match_thoughts` SQL function converts it to a similarity score: `1 - (embedding <=> query_embedding)`. A threshold of `0.5` (the default in the MCP tool) accepts anything above 50% semantic similarity.
+
+## Authentication
+
+The Edge Function checks for your access key on every request before passing it to the MCP handler. Two formats are accepted:
+
+```text
+# Query parameter
+GET https://<project-ref>.supabase.co/functions/v1/open-brain-mcp?key=YOUR_KEY
+
+# Request header
+x-brain-key: YOUR_KEY
+```
+
+The key is checked against the `MCP_ACCESS_KEY` environment variable set as a Supabase secret. A missing or non-matching key returns `401 {"error": "Invalid or missing access key"}`.
+
+```typescript
+const provided = c.req.header("x-brain-key") || new URL(c.req.url).searchParams.get("key");
+if (!provided || provided !== MCP_ACCESS_KEY) {
+  return c.json({ error: "Invalid or missing access key" }, 401, corsHeaders);
+}
+```
+
+CORS preflight requests (`OPTIONS`) are allowed through without auth — required for browser-based clients like claude.ai.
+
+## Why Edge Functions, not local servers
+
+Open Brain deliberately avoids local MCP servers. A local server requires Node.js or Deno installed, a running process, and configuration files on every machine where you want to use your brain. An Edge Function runs in Supabase's global network and is available the moment you paste a URL into any MCP client. There is nothing to install, nothing to keep running, and nothing to update.
+
+The MCP server is deployed with `--no-verify-jwt` so that Supabase's built-in JWT verification is bypassed in favor of the custom `x-brain-key` / `?key=` check. The service role key used internally is never exposed — it lives only in Supabase secrets.
+
+## Why OpenRouter
+
+The server calls OpenRouter rather than OpenAI or Anthropic directly. This means:
+
+- **One API key** covers embeddings (`openai/text-embedding-3-small`) and chat completions (`openai/gpt-4o-mini`) from the same account and billing relationship.
+- **Model swapping** requires only a string change in the Edge Function code. Anything available on OpenRouter can be used without new credentials.
+
+<Note>
+  Swapping models requires that embedding dimensions still match `vector(1536)`. If you switch to a model that produces a different number of dimensions, you must drop and recreate the `embedding` column and the HNSW index with the correct size before redeploying. Browse available embedding models at [openrouter.ai/models](https://openrouter.ai/models).
+</Note>
+
+## Environment variables
+
+The Edge Function reads four environment variables at runtime:
+
+| Variable | Source | Description |
+|---|---|---|
+| `SUPABASE_URL` | Auto-injected | Your project's REST endpoint |
+| `SUPABASE_SERVICE_ROLE_KEY` | Auto-injected | Full read/write access, bypasses RLS |
+| `OPENROUTER_API_KEY` | `supabase secrets set` | OpenRouter API key for embeddings + LLM |
+| `MCP_ACCESS_KEY` | `supabase secrets set` | Your chosen access key for client auth |
+
+`SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available inside any Supabase Edge Function — you do not set them manually.
+
+<CardGroup cols={2}>
+  <Card title="Database schema" icon="table" href="/concepts/database-schema">
+    Column definitions, indexes, and SQL functions for the thoughts table.
+  </Card>
+  <Card title="MCP tools" icon="wrench" href="/concepts/mcp-tools">
+    Full parameter and return type reference for all four MCP tools.
+  </Card>
+</CardGroup>

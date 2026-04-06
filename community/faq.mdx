@@ -1,0 +1,274 @@
+---
+title: "FAQ"
+description: "Common setup issues, troubleshooting, importing data, and architecture questions — answered from real community questions."
+---
+
+These are real questions from the Substack chat, YouTube comments, and Discord. If you hit something not covered here, [open an issue](https://github.com/NateBJones-Projects/OB1/issues) or post in the [Substack community](https://natesnewsletter.substack.com/) so the answer benefits everyone.
+
+## Before you ask for help
+
+Run through this checklist first — it resolves most issues:
+
+1. **Did you follow the guide step by step?** Most issues trace back to a skipped or modified step.
+2. **Check Edge Function logs.** Supabase dashboard → **Edge Functions** → your function → **Logs**. This tells you what's actually breaking.
+3. **Is your URL format correct?** It should be: `https://your-ref.supabase.co/functions/v1/open-brain-mcp?key=your-key`
+4. **Use the Supabase AI assistant.** Paste your error and it can help diagnose Supabase-specific issues.
+5. **Don't let AI rewrite your server code** unless you understand what it's changing. Configuration problems need configuration fixes.
+
+---
+
+## Setup and connection issues
+
+<AccordionGroup>
+  <Accordion title="Claude Desktop / ChatGPT gives me an auth error but Claude Code works fine">
+    This is the single most common issue. The pattern tells you exactly what's wrong: Claude Code can send custom headers, but Claude Desktop, Claude Web, and ChatGPT can't.
+
+    **The fix:** use the MCP Connection URL with the key embedded as a query parameter, not as a custom header. Your URL should look like:
+
+    ```text
+    https://your-project-ref.supabase.co/functions/v1/open-brain-mcp?key=your-access-key
+    ```
+
+    When adding the connector in Claude Desktop (**Settings** → **Connectors**) or ChatGPT (**Settings** → **Apps & Connectors**), paste that full URL. Set authentication to "none" — the key is already in the URL.
+  </Accordion>
+
+  <Accordion title="ChatGPT disabled my memory when I added Open Brain">
+    This is an OpenAI requirement, not a bug. Enabling Developer Mode — which is required to add custom MCP connectors — disables ChatGPT's built-in Memory feature.
+
+    Your Open Brain replaces that functionality, and unlike ChatGPT's memory, it works across every AI client you connect — not just one.
+  </Accordion>
+
+  <Accordion title="How do I migrate my ChatGPT memories into Open Brain?">
+    The Memory Migration prompt in the [companion prompts](/companion-prompts) handles pulling out what your current AI already knows about you.
+
+    If you want your full ChatGPT conversation history: **Settings** → **Data controls** → **Export data**. You'll get JSON files of every conversation.
+
+    From there, use the [ChatGPT Conversation Import](/recipes/importing-data) recipe, which processes the export automatically and loads conversations as thoughts. Or do it manually — use Claude to process the exports, pull out key insights and decisions, and push them through the `capture_thought` tool.
+
+    <Warning>
+      If you've been a heavy ChatGPT user, the export is a lot of data. Processing it is a real project, not a quick task. It's worth doing — but set expectations accordingly.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="ChatGPT doesn't use the Open Brain tools automatically">
+    ChatGPT is less intuitive than Claude at picking the right MCP tool on its own. Be explicit the first few times: "Use the Open Brain `search_thoughts` tool to find my notes about [topic]."
+
+    After it gets the pattern once or twice in a conversation, it usually starts picking up the tools automatically.
+  </Accordion>
+
+  <Accordion title="I'm stuck and Claude is rewriting my edge function code to fix the connection">
+    Pause. The problems are almost never in the code. They're in the configuration — a secret that doesn't match, a URL that's missing the key, a step that got skipped.
+
+    Letting an AI rewrite working code when the issue is a mismatched environment variable makes things harder to debug, not easier.
+
+    Check your Supabase dashboard → **Edge Functions** → `open-brain-mcp` → **Logs** first. That'll tell you what's actually happening.
+  </Accordion>
+
+  <Accordion title="Search isn't working but I can capture recent thoughts">
+    Good news — that means your database, edge functions, and MCP connection are all working. The issue is isolated to the search function.
+
+    Most likely culprits:
+    - The vector extension isn't enabled. Run `create extension if not exists vector;` in the Supabase SQL editor.
+    - Embedding generation is failing silently.
+    - The search function deployed with an error.
+
+    Quickest diagnosis: Supabase dashboard → **Edge Functions** → click on the search function → **Logs** tab.
+
+    <Tip>
+      The Supabase AI assistant is surprisingly good at diagnosing Supabase-specific issues — it has direct context on their APIs. Paste your edge function code and error logs into it.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Importing data
+
+<AccordionGroup>
+  <Accordion title="Can I import my Gmail into Open Brain?">
+    Yes. The [Email History Import](/recipes/importing-data) recipe connects to Gmail via OAuth, pulls emails by label and time window, strips noise (signatures, quoted replies, auto-generated messages), and loads each email as a thought with sender, subject, and date metadata.
+
+    Takes about 30 minutes to set up. You need a Google Cloud project with Gmail API enabled.
+  </Accordion>
+
+  <Accordion title="How do I import my ChatGPT conversations?">
+    Export your data from ChatGPT (**Settings** → **Data controls** → **Export data**), then use the [ChatGPT Conversation Import](/recipes/importing-data) recipe. It processes the JSON export, extracts the meaningful exchanges, and loads them as thoughts.
+
+    Unlike the manual migration approach, this handles the full export automatically.
+  </Accordion>
+
+  <Accordion title="What other data sources can I import?">
+    Check the [`/recipes`](https://github.com/NateBJones-Projects/OB1/tree/main/recipes) folder for the full current list. The community has built importers for:
+
+    - Google Activity (Takeout) — search, Gmail, Maps, YouTube, Chrome history
+    - X/Twitter archives — tweets, DMs, and Grok chats
+    - Instagram — DMs, comments, and captions
+    - Perplexity AI — search history and memory entries
+    - Obsidian vaults — notes with full metadata
+    - Grok (xAI) — conversation exports
+    - Blogger/Journals — Atom XML blog archives
+
+    Each recipe is a standalone build. Pick the ones that match your data.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Obsidian
+
+<AccordionGroup>
+  <Accordion title="How does Open Brain work with Obsidian?">
+    Short answer: it doesn't, and it's not supposed to.
+
+    Obsidian is a note-taking app. Open Brain is a database with vector search. They're not in the same category. You don't need a middleman between your AI and your data — that's the whole point. Your AI talks directly to the database where your thoughts live.
+
+    If you have an existing Obsidian vault you want to bring over, the [Obsidian Vault Import](/recipes/importing-data) recipe is built for exactly that. It moves your content into Open Brain. But Obsidian doesn't sit alongside it or on top of it.
+  </Accordion>
+
+  <Accordion title="But I want to edit and organize my content like I did in Obsidian">
+    In Obsidian, your notes are documents. You write them, organize them, revise them, link them. You're the librarian and the author.
+
+    Open Brain isn't that. It's a memory layer for your AI. You put thoughts in, your AI pulls the right ones out when they're relevant. You don't need to organize or file them — vector search handles retrieval by meaning.
+
+    If you need to fix a typo or delete something, the Supabase Table Editor works (dashboard → **Table Editor** → `thoughts`). But if you find yourself wanting to regularly browse and edit content, that's Obsidian's workflow, not this one. They solve different problems.
+
+    That said — the system is yours to extend. The MCP server has a `capture_thought` tool for writing new thoughts. If you want your AI to revise what's stored, that's one more tool added to the server. You can describe what you want to the Supabase AI assistant and it can help you build it.
+  </Accordion>
+
+  <Accordion title="I want the visual editing experience — headings, bullets, drag stuff around">
+    That's a fair ask. The Table Editor in Supabase is functional but it's a database view, not a writing environment.
+
+    Here's how to think about it: Open Brain is the backend — where the data lives, where the vectors live, where your AI connects. Obsidian is a frontend. There's nothing stopping you from having both. Use Open Brain as your storage and retrieval layer, and build (or connect) a nicer interface on top of it.
+
+    That could be a lightweight web app that reads from your Supabase tables and lets you browse, edit, and organize visually. The database and API are already there. The [community dashboards](/community/dashboards) are a starting point — both the SvelteKit and Next.js options give you search, browse, and capture through a web UI.
+
+    For now, if visual editing is how you think and work best, keep using Obsidian for that and use Open Brain for what it's good at: giving your AI access to everything you've captured. They can coexist.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Storage, retrieval, and architecture
+
+<AccordionGroup>
+  <Accordion title="How do I store long-form content in Open Brain?">
+    Two separate questions that keep getting mixed together.
+
+    Can Postgres store long content? Yes. It's a database. A 4,000-word article is just a text column.
+
+    The real question is about retrieval. When you embed a short thought, the vector is tight — it represents one idea. Search finds it reliably. When you embed a 4,000-word article as a single vector, you're compressing dozens of ideas into one point in vector space. Search quality drops because the embedding is trying to represent too much at once.
+
+    **The fix is chunking.** Break long content into sections, embed each chunk separately, and keep metadata tying them back to the parent document. You can create a parent document table, a chunks table with the embeddings, and now you have hybrid querying natively — filter on structured metadata first using normal Postgres indexes, then do vector similarity search within the filtered set.
+
+    Same database, same pgvector setup. You're just being smarter about what unit of text you embed.
+  </Accordion>
+
+  <Accordion title="How do you prevent memory from getting noisy and poisoning context?">
+    "Store more and more" isn't the right framing. Open Brain is a capture tool. What goes in is up to you.
+
+    The real answer is less about forgetting and more about siloing. Different contexts need different memory. Your coding thoughts shouldn't pollute your creative writing context. The retrieval layer — what gets pulled and when — matters more than the storage layer.
+
+    ChatGPT's built-in memory has exactly this problem: it's one flat pool with no separation. Everything influences everything. That's an architecture problem, not a memory problem.
+
+    Use `source` tags in metadata to separate contexts. "What's in my calendar this week" shouldn't have to wade through your sleep data.
+  </Accordion>
+
+  <Accordion title="I want to store everything — Obsidian vault, health data, GTD, email, calendar. What's the right strategy?">
+    The core question with any vector-based system: what's the right unit of embedding? Every row gets turned into a single vector, and that vector needs to represent one retrievable idea.
+
+    **For text-based content:** one idea per entry. Zettelkasten-style atomic notes are a near-perfect fit — each represents a single concept, the embedding is tight, retrieval is precise. Longer documents should be chunked into meaningful sections.
+
+    **For structured data:**
+    - Health/sleep stats — one entry per night, not one per month. A month of sleep data in one entry means asking "how did I sleep last Tuesday" forces retrieval of an entire month.
+    - Calendar events — one per event
+    - Emails — one per email or per thread
+    - Tasks — one per task
+
+    Don't worry about row count. Postgres handles millions of rows, pgvector's HNSW index keeps search fast regardless of scale, and at $0.02 per million tokens the embedding costs are negligible even at scale.
+
+    **The key thing:** tag every source type in metadata (`source: "garmin"`, `source: "obsidian"`, `source: "calendar"`) so you can filter retrieval by context.
+  </Accordion>
+
+  <Accordion title="Search seems sub-par — I have to coax Claude to find things">
+    Here's how to diagnose it yourself:
+
+    **Check your row count.** Supabase dashboard → Table Editor → `thoughts`. If you're under 20–30 entries, the system just doesn't have enough data for semantic search to work well. It's not broken — it's sparse. The more you put in, the better retrieval gets.
+
+    **Test search directly.** Ask your AI to search for something you know is in there — use words close to what you typed when you captured it. If that works but vaguer queries don't, the system is fine. It just needs more content for semantic matching to have enough to work with.
+
+    **Check edge function logs.** Supabase dashboard → Edge Functions → `open-brain-mcp` → Logs. If search is erroring silently, you'll see it there.
+
+    **Useful diagnostic signal:** if search finds a thought when listing recent entries but NOT through semantic search, the data is there and retrievable but the embedding or similarity matching isn't connecting your query to that entry. This usually improves as you add more content.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## API key rotation
+
+<AccordionGroup>
+  <Accordion title="I rotated my OpenRouter API key and now nothing works">
+    When you generate a new key on [openrouter.ai/keys](https://openrouter.ai/keys), the old key is revoked immediately. But your Open Brain uses that key in multiple places — updating it in one spot doesn't update the others. Everything downstream of the old key breaks silently.
+
+    **Update all of these:**
+
+    1. **Supabase Edge Function secrets** — the most common one to miss. Your MCP server reads the key from here at runtime:
+       ```bash
+       supabase secrets set OPENROUTER_API_KEY=sk-or-v1-your-new-key
+       ```
+
+    2. **Local `.env` files** — any recipes or integrations you run locally (e.g., `recipes/chatgpt-conversation-import/.env`). Open each one and replace the old key.
+
+    3. **CI/CD or deployment configs** — if you've set the key in any deployment pipeline, update it there too.
+
+    **Verify the new key works:**
+
+    ```bash
+    curl https://openrouter.ai/api/v1/models -H "Authorization: Bearer sk-or-v1-your-new-key"
+    ```
+
+    A JSON list of models means the key is valid. A 401 means the key is wrong or not yet active.
+
+    <Tip>
+      After rotating a key, test your Open Brain immediately — capture a test thought and search for it. Don't wait days to discover it's broken.
+    </Tip>
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Rate limits and API issues
+
+<AccordionGroup>
+  <Accordion title="My suite of agents keeps hitting per-minute rate limits">
+    If you've built custom agents on top of Open Brain, rate limit issues with your AI provider are outside the scope of this guide. Open Brain is a single MCP server, not a multi-agent system.
+
+    That said: check your usage tier in your provider's console, make sure your agents aren't all using Opus/Sonnet for tasks that Haiku could handle, and stagger requests rather than firing everything simultaneously.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Perspective and philosophy
+
+<AccordionGroup>
+  <Accordion title="What did I actually accomplish by setting this up?">
+    Think about what you just did. You stood up a PostgreSQL database in the cloud. You wrote database migrations. You deployed serverless edge functions. You configured API secrets and environment variables. You didn't just connect to an MCP server — you built one from scratch and deployed it to production.
+
+    A few years ago, that's a junior backend engineer's first month. If you did it in a few hours with zero prior experience, the guide helped — but the guide doesn't click the buttons for you. That was you.
+  </Accordion>
+
+  <Accordion title="The agent's experience of pulling from Open Brain felt like 'remembering' rather than 'reading someone else's notes'">
+    This is a precise description of what vector retrieval does differently from file reads.
+
+    When an agent reads a file, it's processing someone else's organized structure. When it pulls from vector search, the retrieval is associative — finding what's relevant to the current context by meaning, not by where it was filed. That is closer to how recall works.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Community tips
+
+**Export your debugging sessions** — At the end of a session where you've built something or solved a problem, ask your AI: "Please export a summary of what we did, why we did it, and frame it in a way that will help other people solve the same problem." Then share it in the Discord. Everyone benefits.
+
+**Post problems publicly, not in DMs** — If you run into a blocker, post it in the Substack chat thread or Discord, not in someone's DMs. Other people are hitting the same issues and the answers help everyone.

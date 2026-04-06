@@ -1,0 +1,211 @@
+---
+title: "Family Calendar"
+description: "Multi-person schedule coordination for your household — activities, recurring events, and important dates, all in one place your agent can reason across."
+---
+
+**Difficulty:** Intermediate — Extension 3 of 6
+
+Two kids, two parents, overlapping schedules. Soccer practice conflicts with the dentist appointment. Nobody bought the birthday present. The chaos isn't from lack of caring — it's from lack of a system that can reason across everyone's schedule at once. This extension creates a multi-person family calendar your agent can query in full, surfacing conflicts and upcoming dates before they slip through.
+
+## What you'll learn
+
+- Multi-entity data models (family members → activities relationship)
+- Time-based queries and date handling
+- Recurring events (weekly activities with `day_of_week`)
+- Nullable foreign keys (activities can belong to one person or the whole family)
+- Querying across date ranges
+
+<Note>
+  This extension doesn't use Row Level Security. RLS is introduced in Extension 4 (Meal Planning), where shared household access makes it necessary. Extensions 1–3 are single-user systems.
+</Note>
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Extensions 1–2 recommended but not required
+- Supabase CLI installed and linked to your project
+
+## What gets built
+
+**Three tables:**
+
+- `family_members` — People in your household with relationship and birth date
+- `activities` — One-time and recurring scheduled events linked to family members
+- `important_dates` — Birthdays, anniversaries, deadlines with optional yearly recurrence
+
+**MCP tools added to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `add_family_member` | Add a person to your household roster |
+| `add_activity` | Schedule a one-time or recurring activity |
+| `get_week_schedule` | See everyone's schedule for a given week |
+| `search_activities` | Find activities by title, type, or family member |
+| `add_important_date` | Track birthdays, anniversaries, deadlines |
+| `get_upcoming_dates` | Surface dates in the next N days |
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new), paste `schema.sql` (shown below), and click **Run**.
+
+    Alternatively, if you have `psql` available:
+
+    ```bash
+    psql $DATABASE_URL -f extensions/family-calendar/schema.sql
+    ```
+  </Step>
+
+  <Step title="Set your user ID">
+    If you've completed earlier extensions, your `DEFAULT_USER_ID` is already set. Skip this.
+
+    If starting here:
+
+    ```bash
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the MCP server">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `family-calendar-mcp` |
+    | Download path | `extensions/family-calendar` |
+  </Step>
+
+  <Step title="Connect to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Family Calendar` |
+    | URL | Your MCP Connection URL |
+  </Step>
+
+  <Step title="Test it">
+    ```
+    Add my family members: me (Jonathan), spouse (Sarah), and two kids (Emma age 8, Noah age 5).
+    ```
+
+    ```
+    Add a recurring activity: Emma has soccer practice every Tuesday from 5-6pm at Lincoln Park, starting March 18.
+    ```
+
+    ```
+    Show me our schedule for the week of March 17.
+    ```
+
+    ```
+    Add an important date: Emma's birthday is May 15, remind me 7 days before.
+    ```
+
+    ```
+    What important dates are coming up in the next 30 days?
+    ```
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 3: Family Calendar
+-- Multi-person family scheduling system
+
+-- Family members in your household
+CREATE TABLE family_members (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    relationship TEXT, -- e.g. 'self', 'spouse', 'child', 'parent'
+    birth_date DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Scheduled events and recurring activities
+CREATE TABLE activities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    family_member_id UUID REFERENCES family_members, -- null means whole family
+    title TEXT NOT NULL,
+    activity_type TEXT, -- e.g. 'sports', 'medical', 'school', 'social'
+    day_of_week TEXT, -- for recurring: 'monday', 'tuesday', etc. null for one-time
+    start_time TIME,
+    end_time TIME,
+    start_date DATE,
+    end_date DATE, -- null for one-time or ongoing recurring
+    location TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Birthdays, anniversaries, deadlines
+CREATE TABLE important_dates (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    family_member_id UUID REFERENCES family_members, -- null for family-wide dates
+    title TEXT NOT NULL,
+    date_value DATE NOT NULL,
+    recurring_yearly BOOLEAN DEFAULT false,
+    reminder_days_before INTEGER DEFAULT 7,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indexes
+CREATE INDEX idx_activities_user_dow ON activities(user_id, day_of_week);
+CREATE INDEX idx_activities_family_member ON activities(family_member_id);
+CREATE INDEX idx_activities_user_dates ON activities(user_id, start_date, end_date);
+CREATE INDEX idx_important_dates_user_date ON important_dates(user_id, date_value);
+CREATE INDEX idx_family_members_user ON family_members(user_id);
+```
+
+## Recurring vs. one-time activities
+
+The `activities` table handles both patterns with a single design:
+
+- **Recurring** — Set `day_of_week` (e.g., `'tuesday'`) and leave `start_date`/`end_date` as the season range. The `get_week_schedule` tool queries by day of week within the date range.
+- **One-time** — Set `start_date` and `end_date` to the same day, leave `day_of_week` as null.
+
+<Tip>
+  The `day_of_week` value must be lowercase: `'monday'`, `'tuesday'`, etc. The `get_week_schedule` tool passes a Monday date as `week_start` and queries all activities overlapping that week.
+</Tip>
+
+## Expected outcome
+
+After setup, your agent can:
+
+1. Track everyone's schedule in one place
+2. Surface upcoming events and important dates
+3. Spot scheduling conflicts when two activities overlap
+4. Answer "What does Emma have this week?" or "When is Noah's birthday?"
+5. Remind you about important dates before they arrive
+
+## Troubleshooting
+
+**Activities not showing in `get_week_schedule`**
+
+- Confirm `start_date` and `end_date` are set and bracket the target week
+- For recurring activities, verify `day_of_week` is lowercase (`'tuesday'`, not `'Tuesday'`)
+- Pass `week_start` as a Monday in `YYYY-MM-DD` format
+
+**Family member not linking to activities**
+
+Verify the `family_member_id` UUID is correct. The `family_member_id` column is nullable — an activity with `null` there belongs to the whole family.
+
+## Cross-extension connections
+
+- **Extension 4 (Meal Planning)** directly uses the `family_members` table. Your meal planner queries who's home this week to determine serving sizes.
+- **Extension 5 (Professional CRM)** uses the same multi-entity relationship pattern: the `family_member → activities` model maps directly to `contact → interactions`.
+- **Extension 1 link** — Cross-reference the two systems: "Who is Emma's pediatrician?" queries the Household Knowledge Base; "Schedule Emma's checkup" uses this calendar.
+
+<CardGroup cols={2}>
+  <Card title="Next: Meal Planning" icon="utensils" href="/extensions/meal-planning">
+    Combine scheduling with Row Level Security and a shared household server.
+  </Card>
+  <Card title="Previous: Home Maintenance Tracker" icon="wrench" href="/extensions/home-maintenance">
+    Recurring task scheduling with auto-calculated next-due dates.
+  </Card>
+</CardGroup>

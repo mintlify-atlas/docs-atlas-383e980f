@@ -1,0 +1,235 @@
+---
+title: "Household Knowledge Base"
+description: "Store home facts your agent can recall instantly — paint colors, appliance specs, vendor contacts, measurements, and anything else about your home you'd otherwise forget."
+---
+
+**Difficulty:** Beginner — Extension 1 of 6
+
+You're at the paint store and can't remember the shade in the living room. Your kid's shoe size changed and you're ordering from memory. The plumber from last year — what was their number? Every household accumulates hundreds of small facts that matter at exactly the wrong moment. This extension gives your agent a structured place to hold all of them.
+
+## What you'll learn
+
+- Basic table design with PostgreSQL
+- User-scoped data isolation with environment variables
+- Simple MCP tool creation
+- JSONB patterns for flexible metadata storage
+- Text search with ILIKE patterns
+- Building a Supabase-backed MCP server
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Supabase project configured
+- Supabase CLI installed and linked to your project
+
+## What gets built
+
+**Two tables:**
+
+- `household_items` — Facts about things in your home (paint colors, appliances, measurements, documents, etc.)
+- `household_vendors` — Service providers (plumbers, electricians, landscapers) with contact details and ratings
+
+**Five MCP tools added to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `add_household_item` | Add a new item with flexible JSONB metadata |
+| `search_household_items` | Search by name, category, location, or notes |
+| `get_item_details` | Retrieve full details for a specific item by ID |
+| `add_vendor` | Add a service provider with contact info and rating |
+| `list_vendors` | List vendors, optionally filtered by service type |
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new) for your project, paste the contents of `schema.sql` (shown below), and click **Run**.
+  </Step>
+
+  <Step title="Generate your user ID">
+    All extensions scope data to a `user_id`. Generate a UUID and save it — you'll reuse this same ID across all extensions.
+
+    ```bash
+    # macOS / Linux
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    ```
+
+    Then set it as a secret for your Edge Function:
+
+    ```bash
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the MCP server">
+    Follow the [Deploy an Edge Function](https://supabase.com/docs/guides/functions/deploy) guide with these values:
+
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `household-knowledge-mcp` |
+    | Download path | `extensions/household-knowledge` |
+  </Step>
+
+  <Step title="Connect to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**. Paste your Edge Function URL with your `MCP_ACCESS_KEY` as a query parameter.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Household Knowledge` |
+    | URL | Your MCP Connection URL |
+
+    The same pattern works for ChatGPT, Claude Code, and any other MCP-compatible client.
+  </Step>
+
+  <Step title="Test it">
+    Try these prompts in your AI:
+
+    ```
+    Add a household item: living room paint is Sherwin Williams Sea Salt SW 6204
+    ```
+
+    ```
+    Search for paint colors in my household items
+    ```
+
+    ```
+    Add a vendor: Mike's Plumbing, phone 555-1234, last used them in December 2025
+    ```
+
+    ```
+    List all my plumbers
+    ```
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 1: Household Knowledge Base
+-- Schema for storing household facts and vendor contacts
+
+-- Table: household_items
+-- Stores facts about things in your home (paint colors, appliances, measurements, etc.)
+CREATE TABLE IF NOT EXISTS household_items (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT, -- e.g. 'paint', 'appliance', 'measurement', 'document'
+    location TEXT, -- where in the home this item is
+    details JSONB DEFAULT '{}', -- flexible metadata (model numbers, colors, specs, etc.)
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Table: household_vendors
+-- Tracks service providers (plumbers, electricians, landscapers, etc.)
+CREATE TABLE IF NOT EXISTS household_vendors (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    service_type TEXT, -- e.g. 'plumber', 'electrician', 'landscaper'
+    phone TEXT,
+    email TEXT,
+    website TEXT,
+    notes TEXT,
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    last_used DATE,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Indexes for efficient querying
+CREATE INDEX IF NOT EXISTS idx_household_items_user_category
+    ON household_items(user_id, category);
+
+CREATE INDEX IF NOT EXISTS idx_household_vendors_user_service
+    ON household_vendors(user_id, service_type);
+
+-- Row Level Security (RLS)
+ALTER TABLE household_items ENABLE ROW LEVEL SECURITY;
+ALTER TABLE household_vendors ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY household_items_user_policy ON household_items
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY household_vendors_user_policy ON household_vendors
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Auto-update updated_at on changes
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_household_items_updated_at ON household_items;
+CREATE TRIGGER update_household_items_updated_at
+    BEFORE UPDATE ON household_items
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+## The JSONB `details` field
+
+The `details` column on `household_items` stores arbitrary key-value metadata as JSON. This is how you capture structured data without defining a fixed schema for every item type.
+
+```json
+// Paint color
+{"brand": "Sherwin Williams", "color": "Sea Salt", "code": "SW 6204"}
+
+// Appliance
+{"brand": "Bosch", "model": "SHPM65Z55N", "serial": "FD12345678", "purchase_date": "2024-06-15"}
+
+// Measurement
+{"width": "72in", "height": "36in", "unit": "inches"}
+```
+
+You'll see this same JSONB pattern in Extension 4 (Meal Planning) for recipe ingredients and in Extension 5 (Professional CRM) for contact metadata.
+
+## Expected outcome
+
+After setup, your agent can answer:
+
+- "What's the model number of my dishwasher?"
+- "What paint color is in the bedroom?"
+- "Who's a good plumber we've used before?"
+- "When did we last call the electrician?"
+
+## Troubleshooting
+
+**"Permission denied" or foreign key errors on insert**
+
+Verify `DEFAULT_USER_ID` is set:
+
+```bash
+supabase secrets list
+```
+
+The service role key bypasses RLS, so permission errors usually point to a missing environment variable, not a policy issue.
+
+**"Item not found" when retrieving by ID**
+
+Make sure you're passing the full UUID, not a partial string. The `get_item_details` tool requires an exact UUID match against `user_id`.
+
+## Cross-extension connections
+
+This is the foundation. Patterns you establish here carry through the rest of the path:
+
+- **JSONB flexibility** — The `details` field pattern reappears in Extensions 4 and 5
+- **Vendor tracking** — The `household_vendors` contact model grows into full CRM tracking in Extension 5
+- **User-scoped data** — Every query filters by `user_id`. This is consistent across all six extensions
+
+<CardGroup cols={2}>
+  <Card title="Next: Home Maintenance Tracker" icon="wrench" href="/extensions/home-maintenance">
+    Learn one-to-many relationships, date-based scheduling, and historical logging.
+  </Card>
+  <Card title="Extensions Overview" icon="map" href="/extensions/overview">
+    See the full learning path and how all six extensions connect.
+  </Card>
+</CardGroup>

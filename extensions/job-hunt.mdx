@@ -1,0 +1,361 @@
+---
+title: "Job Hunt Pipeline"
+description: "Track companies, postings, applications, interviews, and contacts across your entire job search — with pipeline analytics and a bridge that turns job search contacts into your permanent professional network."
+---
+
+**Difficulty:** Advanced — Extension 6 of 6
+
+Job hunting is an emotional grinder. You think you're failing because you got three rejections this week. But your agent can show you that your actual interview conversion rate is 40% — well above average. It can catch that you haven't followed up with the hiring manager at Company X in eight days. It can normalize compensation across four different offer structures so you're comparing apples to apples. The data doesn't lie, and having an agent that can reason across your entire pipeline turns an emotional process into a manageable one.
+
+## What you'll learn
+
+- Most complex multi-table schema design (5 tables with cascading relationships)
+- Pipeline and funnel tracking with status transitions
+- Cross-extension integration with Extension 5 (Professional CRM)
+- Advanced queries (conversion rates, timeline analysis, upcoming events)
+- Bridge tables for linking separate data domains
+- Handling nullable foreign keys and optional relationships
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Extension 5 (Professional CRM) strongly recommended — cross-extension linking depends on it
+- Supabase CLI installed and linked to your project
+- Row Level Security patterns from Extensions 4–5
+
+## What gets built
+
+**Five tables:**
+
+- `companies` — Organizations you're tracking in your job search
+- `job_postings` — Specific roles at companies
+- `applications` — Your submitted applications with status tracking
+- `interviews` — Scheduled and completed interviews with notes and ratings
+- `job_contacts` — Recruiters, hiring managers, and referrals with CRM linkage
+
+**MCP tools added to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `add_company` | Add a company with industry, size, remote policy, Glassdoor rating |
+| `add_job_posting` | Add a specific role at a company with salary range and requirements |
+| `submit_application` | Record an application with status, resume version, and cover letter notes |
+| `schedule_interview` | Schedule an interview with type, time, interviewer details |
+| `log_interview_notes` | Add post-interview feedback and rating, update status to completed |
+| `get_pipeline_overview` | Dashboard summary: counts by status, upcoming interviews, recent activity |
+| `get_upcoming_interviews` | List interviews in the next N days with full company and role context |
+| `link_contact_to_professional_crm` | **Cross-extension bridge** — creates a professional contact record from a job search contact |
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new), paste `schema.sql` (shown below), and click **Run**.
+
+    This creates five RLS-enabled tables with cascading deletes. Deleting a company cascades to its postings, applications, and interviews — be deliberate when removing company records.
+  </Step>
+
+  <Step title="Set your user ID">
+    If you've completed earlier extensions, your `DEFAULT_USER_ID` is already set. Skip this.
+
+    If starting here:
+
+    ```bash
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the MCP server">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `job-hunt-mcp` |
+    | Download path | `extensions/job-hunt` |
+  </Step>
+
+  <Step title="Connect to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Job Hunt Pipeline` |
+    | URL | Your MCP Connection URL |
+  </Step>
+
+  <Step title="Test it">
+    Work through these prompts in order — each step depends on the previous one because of the cascading foreign key relationships.
+
+    ```
+    Add a company I'm tracking: TechCorp, enterprise software company, remote-first, San Francisco
+    ```
+
+    ```
+    Add a job posting at TechCorp: Senior AI Engineer, $150k-$200k, posted on LinkedIn
+    ```
+
+    ```
+    Submit an application for the TechCorp AI Engineer role, used resume v3
+    ```
+
+    ```
+    Schedule a phone screen interview for my TechCorp application, tomorrow at 2pm
+    ```
+
+    ```
+    Show me my pipeline overview - how many applications, what stages, upcoming interviews
+    ```
+
+    ```
+    Link the TechCorp recruiter to my professional CRM
+    ```
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 6: Job Hunt Pipeline
+-- Five-table schema: companies, postings, applications, interviews, contacts
+
+CREATE TABLE IF NOT EXISTS companies (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    industry TEXT,
+    website TEXT,
+    size TEXT CHECK (size IN ('startup', 'mid-market', 'enterprise') OR size IS NULL),
+    location TEXT,
+    remote_policy TEXT CHECK (remote_policy IN ('remote', 'hybrid', 'onsite') OR remote_policy IS NULL),
+    notes TEXT,
+    glassdoor_rating DECIMAL(2,1) CHECK (glassdoor_rating >= 1.0 AND glassdoor_rating <= 5.0 OR glassdoor_rating IS NULL),
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS job_postings (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID NOT NULL,
+    title TEXT NOT NULL,
+    url TEXT,
+    salary_min INTEGER,
+    salary_max INTEGER,
+    salary_currency TEXT DEFAULT 'USD',
+    requirements TEXT[],
+    nice_to_haves TEXT[],
+    notes TEXT,
+    source TEXT CHECK (source IN ('linkedin', 'company-site', 'referral', 'recruiter', 'other') OR source IS NULL),
+    posted_date DATE,
+    closing_date DATE,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS applications (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    job_posting_id UUID REFERENCES job_postings(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID NOT NULL,
+    status TEXT DEFAULT 'applied' CHECK (
+        status IN ('draft', 'applied', 'screening', 'interviewing', 'offer', 'accepted', 'rejected', 'withdrawn')
+    ),
+    applied_date DATE,
+    response_date DATE,
+    resume_version TEXT,
+    cover_letter_notes TEXT,
+    referral_contact TEXT,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS interviews (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    application_id UUID REFERENCES applications(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID NOT NULL,
+    interview_type TEXT CHECK (
+        interview_type IN ('phone_screen', 'technical', 'behavioral', 'system_design', 'hiring_manager', 'team', 'final')
+    ),
+    scheduled_at TIMESTAMPTZ,
+    duration_minutes INTEGER,
+    interviewer_name TEXT,
+    interviewer_title TEXT,
+    status TEXT DEFAULT 'scheduled' CHECK (status IN ('scheduled', 'completed', 'cancelled', 'no_show')),
+    notes TEXT,      -- pre-interview prep notes
+    feedback TEXT,   -- post-interview reflection
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5 OR rating IS NULL),
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS job_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    company_id UUID REFERENCES companies(id) ON DELETE SET NULL,
+    name TEXT NOT NULL,
+    title TEXT,
+    email TEXT,
+    phone TEXT,
+    linkedin_url TEXT,
+    role_in_process TEXT CHECK (
+        role_in_process IN ('recruiter', 'hiring_manager', 'referral', 'interviewer', 'other') OR role_in_process IS NULL
+    ),
+    professional_crm_contact_id UUID, -- links to Extension 5's professional_contacts (application-managed)
+    notes TEXT,
+    last_contacted TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_companies_user_id ON companies(user_id);
+CREATE INDEX IF NOT EXISTS idx_job_postings_company_id ON job_postings(company_id);
+CREATE INDEX IF NOT EXISTS idx_applications_user_status ON applications(user_id, status);
+CREATE INDEX IF NOT EXISTS idx_applications_job_posting ON applications(job_posting_id);
+CREATE INDEX IF NOT EXISTS idx_interviews_application_scheduled ON interviews(application_id, scheduled_at);
+CREATE INDEX IF NOT EXISTS idx_interviews_user_scheduled
+    ON interviews(user_id, scheduled_at)
+    WHERE scheduled_at IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_job_contacts_user_company ON job_contacts(user_id, company_id);
+
+-- Row Level Security
+ALTER TABLE companies ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_postings ENABLE ROW LEVEL SECURITY;
+ALTER TABLE applications ENABLE ROW LEVEL SECURITY;
+ALTER TABLE interviews ENABLE ROW LEVEL SECURITY;
+ALTER TABLE job_contacts ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY companies_user_policy ON companies
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY job_postings_user_policy ON job_postings
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY applications_user_policy ON applications
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY interviews_user_policy ON interviews
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY job_contacts_user_policy ON job_contacts
+    FOR ALL USING (auth.uid() = user_id) WITH CHECK (auth.uid() = user_id);
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_companies_updated_at ON companies;
+CREATE TRIGGER update_companies_updated_at
+    BEFORE UPDATE ON companies FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_applications_updated_at ON applications;
+CREATE TRIGGER update_applications_updated_at
+    BEFORE UPDATE ON applications FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+```
+
+## The data model: how the tables cascade
+
+The five tables form a strict parent-child hierarchy:
+
+```
+companies
+  └─ job_postings     (ON DELETE CASCADE from companies)
+       └─ applications (ON DELETE CASCADE from job_postings)
+            └─ interviews (ON DELETE CASCADE from applications)
+
+job_contacts          (ON DELETE SET NULL company_id — contact survives company deletion)
+```
+
+Create records top-down: company first, then posting, then application, then interview. Deleting a company removes everything beneath it. Deleting a contact does not cascade — contacts are preserved with a null `company_id`.
+
+## The `link_contact_to_professional_crm` bridge tool
+
+Recruiters and hiring managers you meet during a job search are professional contacts worth keeping. This tool moves them into your permanent CRM.
+
+**Example workflow:**
+
+1. You add a job contact: Jessica Lee, TechCorp recruiter, jessica@techcorp.com
+2. Multiple interactions: phone screen, interview coordination, offer negotiation — all logged
+3. Your agent calls `link_contact_to_professional_crm` with the `job_contact_id`
+4. The tool creates a record in Extension 5's `professional_contacts` table and writes the UUID back to `job_contacts.professional_crm_contact_id`
+5. After the job search ends, Jessica is in your CRM with full context: company, role, all notes from the search
+
+The `professional_crm_contact_id` link is application-managed, not enforced by a database foreign key. This means you can install Extensions 5 and 6 independently — they reference each other without requiring both to exist.
+
+## Application status flow
+
+```
+draft → applied → screening → interviewing → offer → accepted
+                                                    ↘ rejected
+                       ↘ withdrawn (at any stage)
+```
+
+The `get_pipeline_overview` tool aggregates counts by status so you can see your full funnel in one call.
+
+## Expected outcome
+
+After setup, your agent can answer:
+
+- "Show me my pipeline overview"
+- "What interviews do I have this week?"
+- "What's my conversion rate from phone screen to technical interview?"
+- "Which applications haven't had a response in more than two weeks?"
+- "Who's the recruiter at TechCorp and when did I last talk to them?"
+- "Link all my TechCorp contacts to my professional CRM"
+
+## Troubleshooting
+
+**"Foreign key violation" errors**
+
+Create records in the correct order: company → job posting → application → interview. Verify UUIDs are correct and belong to the same `user_id`.
+
+<Warning>
+  Deleting a company cascades through all related postings, applications, and interviews. This is irreversible. Archive by updating a status field rather than deleting.
+</Warning>
+
+**"Extension 5 not found" when linking contacts**
+
+Verify Extension 5 (Professional CRM) is installed and the `professional_contacts` table exists:
+
+```sql
+SELECT EXISTS (
+  SELECT FROM information_schema.tables
+  WHERE table_name = 'professional_contacts'
+);
+```
+
+Both extensions must use the same Supabase project.
+
+## Cross-extension connections
+
+With all six extensions built, context flows freely across your entire system:
+
+- **Extension 1 (Household Knowledge)** — Your agent knows your current location and family situation relevant to relocation decisions
+- **Extension 2 (Home Maintenance)** — Understands timing constraints: "I can't start until after the roof replacement in May"
+- **Extension 3 (Family Calendar)** — Schedules interviews around existing commitments, factors in family obligations
+- **Extension 4 (Meal Planning)** — Knows your dietary needs, can plan around busy interview days
+- **Extension 5 (Professional CRM)** — The bridge tool makes job search contacts permanent professional network members
+
+## What's next
+
+You've completed all six extensions. Your agent now has a comprehensive, interconnected system.
+
+Some directions from here:
+
+1. **Audit your tools** — You're now exposing ~40 MCP tool definitions across six extensions. Run an audit to identify redundancies, merge CRUD tools, and scope servers by workflow.
+2. **Build your own extensions** — Use these six as templates for domains specific to your life.
+3. **Explore primitives** — Dive deeper into Row Level Security, Remote MCP, and other patterns.
+4. **Create compound queries** — Build tools that reason across multiple extensions simultaneously.
+5. **Contribute back** — Share what you build with the OB1 community.
+
+<CardGroup cols={2}>
+  <Card title="Extensions Overview" icon="map" href="/extensions/overview">
+    Review the full learning path and how all six extensions connect.
+  </Card>
+  <Card title="Previous: Professional CRM" icon="address-book" href="/extensions/professional-crm">
+    Contact tracking and the bridge between your thoughts and your network.
+  </Card>
+</CardGroup>

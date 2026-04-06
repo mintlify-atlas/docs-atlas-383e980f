@@ -1,0 +1,75 @@
+---
+title: "Recipes & Skills Overview"
+description: "Standalone capability builds and reusable agent behaviors contributed by the Open Brain community."
+---
+
+Recipes and skills are the open contribution layer of Open Brain. Anyone can build one, anyone can use one, and none of them require you to follow a specific learning path. The only prerequisite is a working Open Brain setup.
+
+## What are recipes?
+
+Recipes are standalone capability builds. Each recipe adds something specific to your Open Brain — a new data import, an automated workflow, a new retrieval pattern — without depending on any other recipe or extension. You can install any recipe in any order.
+
+Every recipe in the repo was reviewed by the maintainer team before being merged. Each one includes:
+
+- A clear description of what it does
+- A prerequisites list
+- Step-by-step instructions you can follow copy-paste
+- An expected outcome so you know when it worked
+- Troubleshooting for the most common issues
+
+Recipes live in the [`/recipes`](https://github.com/NateBJones-Projects/OB1/tree/main/recipes) folder of the OB1 repository.
+
+## What are skills?
+
+Skills are standalone agent behaviors packaged as plain-text prompt files (`SKILL.md`). Drop one into Claude Code, Codex, Cursor, or any AI client that supports reusable instructions, and the agent gains a new, well-defined behavior.
+
+Skills are smaller than recipes — no full infrastructure build required. They are reusable across multiple contexts, and several recipes depend on canonical skills as shared building blocks rather than duplicating the prompt logic.
+
+Skills live in the [`/skills`](https://github.com/NateBJones-Projects/OB1/tree/main/skills) folder of the OB1 repository.
+
+## Three categories
+
+<CardGroup cols={2}>
+  <Card title="Importing your data" icon="database" href="/recipes/importing-data">
+    Pull your ChatGPT history, Gmail, Obsidian vault, X/Twitter exports, Instagram, Google Takeout, and more into Open Brain as searchable, embedded thoughts.
+  </Card>
+  <Card title="Workflow recipes" icon="workflow" href="/recipes/workflows">
+    Standalone capabilities that make your Open Brain smarter: Auto-Capture, Panning for Gold, Claudeception, Life Engine, Daily Digest, and more.
+  </Card>
+  <Card title="Agent skills" icon="brain" href="/recipes/agent-skills">
+    Plain-text skill packs for Claude Code, Codex, and Cursor. Competitive analysis, research synthesis, meeting synthesis, deal memos, and more.
+  </Card>
+  <Card title="Full contribution list" icon="github" href="https://github.com/NateBJones-Projects/OB1">
+    Browse the complete repository — all recipes, skills, dashboards, integrations, and extensions in one place.
+  </Card>
+</CardGroup>
+
+## How to use a contribution
+
+Every recipe and skill follows the same pattern:
+
+<Steps>
+  <Step title="Find the contribution">
+    Browse the category tables in the [README](https://github.com/NateBJones-Projects/OB1/blob/main/README.md), or navigate the folders directly on GitHub. The three main folders are `/recipes`, `/skills`, and `/extensions`.
+  </Step>
+  <Step title="Open the folder and read the README">
+    Each contribution lives in its own subfolder. Open it and read the README before doing anything else. The README contains the prerequisites list, step-by-step instructions, and expected outcome.
+  </Step>
+  <Step title="Gather prerequisites">
+    Most recipes need your Supabase project URL and service role key, an OpenRouter API key, and sometimes a third-party credential (Gmail OAuth, a Telegram bot token, etc.). The README includes a credential tracker block you can copy and fill in.
+  </Step>
+  <Step title="Follow the instructions">
+    Recipes typically involve running SQL in the Supabase SQL Editor, deploying a Supabase Edge Function, or running a Python or Deno script locally. Skills involve copying a `SKILL.md` file into your AI client's skills directory.
+  </Step>
+  <Step title="Verify the outcome">
+    Each README tells you exactly what to check when it's working. Most recipes end with a test query you can run against your Open Brain to confirm everything landed correctly.
+  </Step>
+</Steps>
+
+<Tip>
+  If a recipe depends on a canonical skill (for example, the Auto-Capture recipe requires the Auto-Capture skill pack), the README links to the skill and tells you to install it first. Install skill dependencies before following the recipe.
+</Tip>
+
+## Want to contribute?
+
+Recipes, skills, dashboards, and integrations are open for community contributions. Read the [Contributing guide](/community/contributing) for submission requirements, the `metadata.json` format, and what the automated review checks.

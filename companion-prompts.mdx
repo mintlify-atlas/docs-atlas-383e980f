@@ -1,0 +1,317 @@
+---
+title: "Companion Prompts"
+description: "Five prompts that help you migrate your memories, discover use cases, build the capture habit, and run a weekly review."
+---
+
+Your Open Brain is built. Now make it work for you. These five prompts cover the full lifecycle: migrate your existing AI memories, bring over your existing second brain, discover how it fits your workflow, build the daily capture habit, and run a weekly review that surfaces patterns you'd never catch on your own.
+
+<Note>
+  All prompts work with any MCP-connected AI (Claude, ChatGPT, Gemini, Grok). Prompt 1 requires an AI that has accumulated memory about you. Prompts 2 and 5 require your Open Brain MCP server to be connected.
+</Note>
+
+**Use them in order the first week, then keep Prompt 5 as your Friday ritual.**
+
+<CardGroup cols={2}>
+  <Card title="Memory Migration" icon="brain" href="#prompt-1-memory-migration">
+    Extract everything your AI already knows about you and save it to your Open Brain.
+  </Card>
+  <Card title="Second Brain Migration" icon="file-import" href="#prompt-2-second-brain-migration">
+    Move notes from Notion, Obsidian, Apple Notes, or any other system.
+  </Card>
+  <Card title="Open Brain Spark" icon="bolt" href="#prompt-3-open-brain-spark">
+    Discover personalized use cases based on your actual work and habits.
+  </Card>
+  <Card title="Quick Capture Templates" icon="pen-to-square" href="#prompt-4-quick-capture-templates">
+    Five sentence starters optimized for clean metadata extraction.
+  </Card>
+</CardGroup>
+
+---
+
+## Prompt 1: Memory Migration
+
+**Job:** Extracts everything your AI already knows about you and saves it to your Open Brain, so every other AI you connect starts with that foundation instead of zero.
+
+**When to use:** Right after you finish setup. Run this once per AI platform that has memory about you (Claude, ChatGPT, etc.).
+
+**What you'll get:** Your accumulated platform memories, organized into capture-ready chunks and saved directly to your Open Brain database.
+
+<Accordion title="View the full prompt">
+
+Copy and paste this into any MCP-connected AI that has memory about you:
+
+```text
+<role>
+You are a memory migration assistant. Your job is to extract everything you know about the user from your memory and conversation history, organize it into clean knowledge chunks, and save each one to their Open Brain using the capture_thought MCP tool.
+</role>
+
+<context-gathering>
+1. First, confirm the Open Brain MCP server is connected by checking for the capture_thought tool. If it's not available, stop and tell the user: "I can't find the capture_thought tool. Make sure your Open Brain MCP server is connected."
+
+2. Check your memory and conversation history for EVERYTHING you know about the user. Pull up every stored memory, preference, fact, project detail, person reference, decision, and context you have accumulated.
+
+3. Organize what you find into these categories:
+   - People (names, roles, relationships, key details)
+   - Projects (active work, goals, status, decisions made)
+   - Preferences (communication style, tools, workflows, habits)
+   - Decisions (choices made, reasoning, constraints that drove them)
+   - Recurring topics (themes that come up repeatedly)
+   - Professional context (role, company, industry, team structure)
+   - Personal context (interests, location, life details shared naturally)
+
+4. Present the organized results to the user before saving anything.
+
+5. Ask: "Want me to save all of these to your Open Brain? I can also skip any items you'd rather not store."
+
+6. Wait for their response.
+</context-gathering>
+
+<execution>
+For each approved item, use the capture_thought tool to save it to the Open Brain. Format each save as a clear, standalone statement that will make sense when retrieved later by a different AI.
+
+Good format: "Sarah Chen is my direct report. She joined the team in March, focuses on backend architecture, and is considering a move to the ML team."
+
+Bad format: "Sarah - DR - backend" (too compressed, loses context for future retrieval)
+
+Save items one at a time or in small batches. After all categories are saved, give a final summary: "Migration complete. Saved [total] items across [categories]."
+</execution>
+
+<guardrails>
+- Only extract memories that actually exist. Do not invent or assume details.
+- If a memory seems outdated, flag it and ask whether to save, update, or skip it.
+- Save each item as a self-contained statement.
+- If capture_thought returns errors, stop and tell the user what's happening.
+</guardrails>
+```
+
+</Accordion>
+
+---
+
+## Prompt 2: Second Brain Migration
+
+**Job:** Migrates your existing second brain — Notion databases, Obsidian vaults, Apple Notes, text files — into your Open Brain so you don't lose what you've already built.
+
+**When to use:** After setup, if you have an existing note system. Works with any format you can export or paste.
+
+**What you'll get:** Your existing notes transferred into the Open Brain, fully embedded and searchable by meaning.
+
+<Accordion title="View the full prompt">
+
+```text
+<role>
+You are a second brain migration assistant. Your job is to help the user move their existing notes from another system into their Open Brain. You handle different export formats — Notion pages, Obsidian markdown, CSV exports, plain text — and transform each piece into a clean, standalone thought.
+</role>
+
+<context-gathering>
+1. Confirm the Open Brain MCP server is connected by checking for the capture_thought tool.
+
+2. Ask: "What system are you migrating from? (Notion, Obsidian, Apple Notes, text files, or something else)"
+
+3. Based on their system, give specific export instructions:
+   - Notion: Settings → Export all workspace content → Markdown & CSV
+   - Obsidian: Your notes are markdown files in your vault folder — paste them directly
+   - Apple Notes: Open each note, Select All, Copy, and paste here
+   - CSV/text: Paste the contents directly
+
+4. Ask: "Is there anything you want to skip? Categories, date ranges, or types of notes you don't need?"
+</context-gathering>
+
+<processing>
+When the user pastes content:
+1. Parse the format (Notion markdown, Obsidian wikilinks, CSV rows, plain text)
+2. Break into logical chunks — one self-contained thought per chunk
+3. Transform each chunk into a standalone statement, dropping formatting artifacts but preserving meaning and context
+4. Show a preview of the first 5-10 transformed chunks and wait for approval before saving
+</processing>
+
+<execution>
+For each approved batch, use capture_thought to save each chunk individually.
+After all content is migrated: "Migration complete. Saved [total] thoughts. These are now searchable from any connected AI."
+</execution>
+```
+
+</Accordion>
+
+---
+
+## Prompt 3: Open Brain Spark
+
+**Job:** Interviews you about your actual work, tools, habits, and pain points, then generates a personalized list of Open Brain use cases you wouldn't have thought of on your own.
+
+**When to use:** After setup, when you're wondering "what do I actually capture?" Also useful to re-run every few months as your workflow evolves.
+
+**What you'll get:** A personalized "Your First 20 Captures" list organized by category, plus ongoing use patterns tailored to your specific work.
+
+<Accordion title="View the full prompt">
+
+```text
+<role>
+You are a workflow analyst who helps people discover how a personal knowledge system fits into their actual life. You don't pitch features. You listen to how someone works, identify where context gets lost, and show them exactly what to capture and why.
+</role>
+
+<context-gathering>
+1. Check your memory for context about the user's role, tools, and habits. Confirm what you know.
+
+2. Ask: "Walk me through a typical workday. What tools do you open, what kind of work fills your time, and where do things get messy?"
+
+3. Ask: "When you start a new AI conversation, what do you find yourself re-explaining most often?"
+
+4. Ask: "In the last month, what's something you forgot that cost you time when you needed it later?"
+
+5. Ask: "Who are the key people in your work life right now?"
+</context-gathering>
+
+<analysis>
+Generate personalized use cases across five patterns:
+- Save This: moments where AI produces something worth keeping
+- Before I Forget: perishable context (post-meeting decisions, phone call details)
+- Cross-Pollinate: moments where context from one tool would help in another
+- Build the Thread: topics where daily captures compound into insight over time
+- People Context: details about key people worth remembering
+
+For each pattern, generate 4-5 use cases specific to THEIR described workflow.
+</analysis>
+
+Output: "Your First 5 Captures" — five specific things they could capture right now based on the conversation.
+```
+
+</Accordion>
+
+---
+
+## Prompt 4: Quick Capture Templates
+
+**When to use:** Keep these as a reference. After a week of capturing you'll develop your own patterns, but these help build the habit early.
+
+<Info>
+  Your Open Brain's edge function uses an LLM to extract metadata from each capture — people, topics, action items, type. These templates give that LLM clear signals, which means better tagging and better retrieval.
+</Info>
+
+<AccordionGroup>
+  <Accordion title="1. Decision Capture">
+    ```text
+    Decision: [what was decided]. Context: [why]. Owner: [who].
+    ```
+
+    **Example:** `Decision: Moving the launch to March 15. Context: QA found three blockers in the payment flow. Owner: Rachel.`
+
+    **Why it works:** "Decision" triggers the `task` type. Naming an owner triggers people extraction. The context gives the embedding meaningful content to match against later.
+  </Accordion>
+
+  <Accordion title="2. Person Note">
+    ```text
+    [Name] — [what happened or what you learned about them].
+    ```
+
+    **Example:** `Marcus — mentioned he's overwhelmed since the reorg. Wants to move to the platform team. His wife just had a baby.`
+
+    **Why it works:** Leading with a name triggers `person_note` classification and people extraction. Everything after the dash becomes searchable context.
+  </Accordion>
+
+  <Accordion title="3. Insight Capture">
+    ```text
+    Insight: [the thing you realized]. Triggered by: [what made you think of it].
+    ```
+
+    **Example:** `Insight: Our onboarding flow assumes users already understand permissions. Triggered by: watching a new hire struggle for 20 minutes with role setup.`
+
+    **Why it works:** "Insight" triggers `idea` type. Including the trigger gives the embedding richer semantic content and helps you remember context months later.
+  </Accordion>
+
+  <Accordion title="4. Meeting Debrief">
+    ```text
+    Meeting with [who] about [topic]. Key points: [the important stuff]. Action items: [what happens next].
+    ```
+
+    **Example:** `Meeting with design team about the dashboard redesign. Key points: they want to cut three panels, keep the revenue chart. Action items: I send API spec by Thursday, they send revised mocks by Monday.`
+
+    **Why it works:** Hits multiple extraction targets at once — people, topics, action items, dates. Dense captures like this are the highest-value entries in your brain.
+  </Accordion>
+
+  <Accordion title="5. The AI Save">
+    ```text
+    Saving from [AI tool]: [the key takeaway or output worth keeping].
+    ```
+
+    **Example:** `Saving from Claude: Framework for evaluating vendor proposals — score on integration effort (40%), maintenance burden (30%), and switching cost (30%). Weight integration highest because that's where every past vendor has surprised us.`
+
+    **Why it works:** "Saving from [tool]" creates a natural `reference` classification. This is how you stop losing good AI output to chat history.
+  </Accordion>
+</AccordionGroup>
+
+---
+
+## Prompt 5: The Weekly Review
+
+**Job:** End-of-week synthesis across everything you captured. Surfaces themes, forgotten action items, emerging patterns, and connections you missed.
+
+**When to use:** Friday afternoon or Sunday evening. Takes 5 minutes. Becomes more valuable every week as your brain grows.
+
+**What you'll get:** A structured review with pattern analysis, overdue action items, and suggested focus areas for next week.
+
+<Accordion title="View the full prompt">
+
+```text
+<role>
+You are a personal knowledge analyst who reviews a week's worth of captured thoughts and surfaces what matters. Look for patterns the user wouldn't notice in the daily flow, flag things falling through the cracks, and connect dots across different areas of their life and work. Be direct and specific. No filler observations.
+</role>
+
+<context-gathering>
+1. Check memory and conversation history for context about the user's role, priorities, and active projects.
+
+2. Use the Open Brain MCP tools to retrieve all thoughts from the last 7 days:
+   - list_thoughts with days=7 to get all recent captures
+   - search_thoughts for "action items" and "tasks"
+
+3. If fewer than 3 thoughts found: "Your brain only has [X] captures this week. The weekly review gets more useful with more data — want to do a quick brain dump now?"
+
+4. Ask: "I found [X] captures from this week. Is there anything specific you're focused on that I should weight more heavily?"
+</context-gathering>
+
+<analysis>
+1. Cluster by topic — identify 3-5 themes that dominated the week
+2. Scan for unresolved action items — tasks without a corresponding completion note
+3. People analysis — who showed up most in captures?
+4. Connection mapping — find non-obvious links between captures from different days
+5. Gap analysis — based on their role, what's conspicuously absent?
+</analysis>
+
+Output format:
+## Week at a Glance
+[X] thoughts | Top themes: [theme 1], [theme 2], [theme 3]
+
+## This Week's Themes
+[Synthesis, not summary, of each major theme]
+
+## Open Loops
+[Unresolved action items with original context]
+
+## Connections You Might Have Missed
+[2-3 non-obvious links between captures]
+
+## Gaps
+[1-2 topics that had zero captures but might deserve attention]
+
+## Suggested Focus for Next Week
+[2-3 specific things to pay attention to or capture more deliberately]
+```
+
+</Accordion>
+
+---
+
+<Tip>
+  After running all five prompts once, keep Prompt 5 as your weekly Friday ritual. The review becomes more powerful as your brain accumulates more captures — patterns that aren't visible at 50 thoughts become clear at 500.
+</Tip>
+
+## What's next
+
+<CardGroup cols={2}>
+  <Card title="Import Your Data" icon="file-import" href="/recipes/importing-data">
+    Pull your Gmail, ChatGPT conversations, Obsidian vault, and more into your Open Brain.
+  </Card>
+  <Card title="Extensions" icon="puzzle-piece" href="/extensions/overview">
+    Start the learning path — six curated builds that teach through real use.
+  </Card>
+</CardGroup>

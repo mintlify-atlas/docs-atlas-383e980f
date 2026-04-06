@@ -1,0 +1,331 @@
+---
+title: "Meal Planning"
+description: "Recipes, weekly meal plans, and auto-generated shopping lists — with a shared server so your partner can view plans and check off groceries without accessing your full Open Brain."
+---
+
+**Difficulty:** Intermediate — Extension 4 of 6
+
+Your agent can reason across five datasets: what you've cooked before, what's in the pantry, who's home this week (from the family calendar), what people actually liked, and what you need to buy. That's meal planning that actually works. And your partner needs access too — not to your whole brain, just to the meal plan and the shopping list. This is where you learn to share specific parts of your system with someone else.
+
+## What you'll learn
+
+- Row Level Security (first introduction to multi-user access)
+- Shared MCP server (separate server with limited, scoped access)
+- JSONB for complex data (ingredients, instructions)
+- Auto-generating derivative data (shopping lists from meal plans)
+- Cross-extension queries (checking who's home this week from the family calendar)
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Extensions 1–3 recommended (Extension 3's `family_members` table is used for cross-extension integration)
+- Supabase CLI installed and linked to your project
+- Read the Row Level Security primitive before proceeding — this extension introduces RLS for the first time
+
+<Warning>
+  This extension creates **two** Edge Functions: a primary server with your full access and a shared server with limited household access. The shared server uses a separate access key (`MCP_HOUSEHOLD_ACCESS_KEY`) from your main key.
+</Warning>
+
+## What gets built
+
+**Three tables:**
+
+- `recipes` — Your recipe collection with JSONB ingredients and instructions
+- `meal_plans` — Weekly meal planning linked to recipes
+- `shopping_lists` — Auto-generated grocery lists from meal plans
+
+**Primary MCP tools (your full access):**
+
+| Tool | What it does |
+|------|-------------|
+| `add_recipe` | Add a recipe with ingredients and instructions |
+| `search_recipes` | Search by name, cuisine, tags, or ingredient |
+| `update_recipe` | Update an existing recipe |
+| `create_meal_plan` | Plan meals for a week |
+| `get_meal_plan` | View the meal plan for a given week |
+| `generate_shopping_list` | Auto-generate shopping list from meal plan |
+
+**Shared MCP tools (household access — read + shopping list only):**
+
+| Tool | What it does |
+|------|-------------|
+| `view_meal_plan` | View meal plans (read-only) |
+| `view_recipes` | Browse recipes (read-only) |
+| `view_shopping_list` | View the shopping list |
+| `mark_item_purchased` | Toggle an item as purchased |
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new), paste `schema.sql` (shown below), and click **Run**.
+
+    The schema includes RLS policies on all three tables. Read through them before running — they define what your partner can and can't access.
+  </Step>
+
+  <Step title="Set your user ID">
+    If you've completed earlier extensions, your `DEFAULT_USER_ID` is already set. Skip this.
+
+    If starting here:
+
+    ```bash
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the primary MCP server">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `meal-planning-mcp` |
+    | Download path | `extensions/meal-planning` |
+  </Step>
+
+  <Step title="Connect the primary server to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Meal Planning` |
+    | URL | Your MCP Connection URL |
+  </Step>
+
+  <Step title="Test the primary server">
+    ```
+    Add a recipe: Chicken Stir-Fry. Ingredients: 1 lb chicken breast, 2 cups broccoli, 1 cup bell peppers, 3 tbsp soy sauce, 2 tbsp oil. Instructions: cut chicken, heat oil, cook chicken 5 min, add vegetables 3 min, add soy sauce. Tags: quick, healthy. Prep 10 min, cook 15 min, serves 4.
+    ```
+
+    ```
+    Plan meals for the week of March 17: Monday dinner is chicken stir-fry, Tuesday dinner is pasta night, Wednesday dinner is tacos.
+    ```
+
+    ```
+    Generate a shopping list for the week of March 17.
+    ```
+  </Step>
+</Steps>
+
+## Setting up the shared server
+
+The shared server gives household members limited access — they can see meal plans and manage the shopping list without touching anything else in your Open Brain.
+
+<Steps>
+  <Step title="Create a household member role">
+    The RLS policies check for `auth.jwt() ->> 'role' = 'household_member'`. Grant this role to your partner's Supabase user:
+
+    ```sql
+    UPDATE auth.users
+    SET raw_app_meta_data = jsonb_set(
+      COALESCE(raw_app_meta_data, '{}'),
+      '{role}',
+      '"household_member"'
+    )
+    WHERE email = 'partner@example.com';
+    ```
+
+    Alternatively, use a shared service account with a scoped API key (simpler but less granular).
+  </Step>
+
+  <Step title="Set the household access key">
+    ```bash
+    supabase secrets set MCP_HOUSEHOLD_ACCESS_KEY=your-household-key-here
+    supabase secrets set SUPABASE_HOUSEHOLD_KEY=household-scoped-api-key
+    ```
+  </Step>
+
+  <Step title="Deploy the shared Edge Function">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `meal-planning-shared-mcp` |
+    | Source file | `shared-server.ts` (not `index.ts`) |
+    | Access key secret | `MCP_HOUSEHOLD_ACCESS_KEY` |
+  </Step>
+
+  <Step title="Connect your household member">
+    Your partner follows the same connector setup on their device:
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Meal Planning (Shared)` |
+    | URL | The shared server's MCP Connection URL |
+
+    They can view meal plans and check off grocery items. They cannot create recipes, modify meal plans, or access any other part of your Open Brain.
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 4: Meal Planning
+-- Complete meal planning system with RLS for shared household access
+
+CREATE TABLE recipes (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    cuisine TEXT,
+    prep_time_minutes INTEGER,
+    cook_time_minutes INTEGER,
+    servings INTEGER,
+    ingredients JSONB NOT NULL DEFAULT '[]', -- array of {name, quantity, unit}
+    instructions JSONB NOT NULL DEFAULT '[]', -- array of step strings
+    tags TEXT[] DEFAULT '{}',
+    rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE meal_plans (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    week_start DATE NOT NULL, -- should be a Monday
+    day_of_week TEXT NOT NULL, -- 'monday', 'tuesday', etc.
+    meal_type TEXT NOT NULL CHECK (meal_type IN ('breakfast', 'lunch', 'dinner', 'snack')),
+    recipe_id UUID REFERENCES recipes,
+    custom_meal TEXT, -- for meals without a recipe
+    servings INTEGER,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE shopping_lists (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    week_start DATE NOT NULL,
+    items JSONB NOT NULL DEFAULT '[]', -- array of {name, quantity, unit, purchased: bool, recipe_id}
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now(),
+    updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- Indexes
+CREATE INDEX idx_recipes_user_cuisine ON recipes(user_id, cuisine);
+CREATE INDEX idx_recipes_user_tags ON recipes USING GIN (tags);
+CREATE INDEX idx_meal_plans_user_week ON meal_plans(user_id, week_start);
+CREATE INDEX idx_shopping_lists_user_week ON shopping_lists(user_id, week_start);
+
+-- Enable Row Level Security
+ALTER TABLE recipes ENABLE ROW LEVEL SECURITY;
+ALTER TABLE meal_plans ENABLE ROW LEVEL SECURITY;
+ALTER TABLE shopping_lists ENABLE ROW LEVEL SECURITY;
+
+-- RLS: owner has full access
+CREATE POLICY "Users can CRUD their own recipes"
+    ON recipes FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can CRUD their own meal plans"
+    ON meal_plans FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY "Users can CRUD their own shopping lists"
+    ON shopping_lists FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- RLS: household members get read access
+CREATE POLICY "Household members can view recipes"
+    ON recipes FOR SELECT
+    USING (
+        auth.jwt() ->> 'role' = 'household_member'
+        OR auth.uid() = user_id
+    );
+
+CREATE POLICY "Household members can view meal plans"
+    ON meal_plans FOR SELECT
+    USING (
+        auth.jwt() ->> 'role' = 'household_member'
+        OR auth.uid() = user_id
+    );
+
+CREATE POLICY "Household members can view shopping lists"
+    ON shopping_lists FOR SELECT
+    USING (
+        auth.jwt() ->> 'role' = 'household_member'
+        OR auth.uid() = user_id
+    );
+
+-- RLS: household members can check off grocery items
+CREATE POLICY "Household members can update shopping lists"
+    ON shopping_lists FOR UPDATE
+    USING (
+        auth.jwt() ->> 'role' = 'household_member'
+        OR auth.uid() = user_id
+    )
+    WITH CHECK (
+        auth.jwt() ->> 'role' = 'household_member'
+        OR auth.uid() = user_id
+    );
+```
+
+## How RLS works here
+
+Row Level Security enforces access at the database level. Two policy layers are applied to each table:
+
+1. **Owner policy** — Full CRUD access when `auth.uid() = user_id`
+2. **Household member policy** — Read-only access (plus UPDATE on shopping lists) when the JWT contains `role = 'household_member'`
+
+The service role key bypasses RLS entirely, which is why your primary MCP server can use it for admin operations. The shared server uses a scoped key to keep RLS enforced.
+
+<Tip>
+  RLS policies are additive — a row is returned if **any** matching policy allows it. This means the household member policy doesn't restrict the owner; both policies apply and either can grant access.
+</Tip>
+
+## Cross-extension connections
+
+**With Family Calendar (Extension 3):**
+Your agent can check who's home this week via the `family_members` and `activities` tables to adjust serving sizes:
+
+```
+Who's home for dinner this week? Adjust the meal plan servings accordingly.
+```
+
+**With Household Knowledge Base (Extension 1):**
+Cross-reference pantry inventory against recipe ingredients:
+
+```
+Do we have the ingredients for chicken stir-fry?
+```
+
+## Expected outcome
+
+After setup, your agent can:
+
+- Store and search your recipe collection
+- Plan weekly meals with a mix of recipes and custom entries
+- Auto-generate shopping lists by aggregating recipe ingredients
+- Let your partner view plans and check off grocery items without full system access
+
+## Troubleshooting
+
+**RLS policies blocking queries on the shared server**
+
+Verify your user has the `household_member` role in `raw_app_meta_data`:
+
+```sql
+SELECT raw_app_meta_data FROM auth.users WHERE email = 'partner@example.com';
+```
+
+**JSONB ingredient search not working**
+
+The `search_recipes` tool uses the `.cs.` (contains) operator for JSONB — ingredient names must match exactly (case-insensitive). For flexible search, add a GIN index:
+
+```sql
+CREATE INDEX idx_recipes_ingredients_gin ON recipes USING GIN (ingredients);
+```
+
+**Shopping list aggregation looks wrong**
+
+The current implementation concatenates quantities as strings (e.g., `"1 cup + 2 cups"`). This is by design for simplicity. For production use, you'd extend the `generate_shopping_list` tool with smarter quantity parsing.
+
+<CardGroup cols={2}>
+  <Card title="Next: Professional CRM" icon="address-book" href="/extensions/professional-crm">
+    Apply RLS to protect professional contact data and wire your thoughts to the people they're about.
+  </Card>
+  <Card title="Previous: Family Calendar" icon="calendar" href="/extensions/family-calendar">
+    Multi-person scheduling that this extension queries for who's home.
+  </Card>
+</CardGroup>

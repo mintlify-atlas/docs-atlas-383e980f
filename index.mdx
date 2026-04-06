@@ -1,97 +1,78 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Open Brain — AI Memory Infrastructure"
+description: "One database, one MCP server, any AI. Give every AI tool you use the same persistent memory of you."
 ---
 
-## Setting up
+Open Brain is the infrastructure layer for your thinking. One Supabase database with vector search, one MCP server deployed as an Edge Function, and any AI you use can read and write to the same persistent knowledge base — Claude, ChatGPT, Cursor, Claude Code, whatever ships next month.
 
-Get your documentation site up and running in minutes.
+This isn't a notes app. It's an open protocol built so every AI tool shares the same memory of you.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
-  <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
-  >
-    Edit your docs locally and preview them in real time.
+<CardGroup cols={2}>
+  <Card title="Quick Setup" icon="rocket" href="/quickstart">
+    Build the full system in about 45 minutes. No coding experience needed.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
+  <Card title="AI-Assisted Setup" icon="robot" href="/ai-assisted-setup">
+    Prefer building with Cursor or Claude Code? Point it at this repo and go.
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
+  <Card title="How It Works" icon="microchip" href="/concepts/architecture">
+    Understand the database, MCP server, and how thoughts flow through the system.
   </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
+  <Card title="Extensions" icon="puzzle-piece" href="/extensions/overview">
+    A progressive learning path — six curated builds that teach through real use.
   </Card>
-</Columns>
+</CardGroup>
 
-## Create beautiful pages
+## What you're building
 
-Everything you need to create world-class documentation.
+<Steps>
+  <Step title="Create your Supabase project">
+    A PostgreSQL database with pgvector enabled — your persistent memory store. Free tier. Takes 2 minutes.
+  </Step>
+  <Step title="Deploy the MCP server">
+    One Supabase Edge Function that gives any AI four tools: capture, search, list, and stats. No local servers.
+  </Step>
+  <Step title="Connect your AI clients">
+    Claude Desktop, ChatGPT, Claude Code, Cursor — paste one URL and you're connected. Any MCP client works.
+  </Step>
+  <Step title="Start building extensions">
+    The core system is your foundation. Extensions, recipes, and skills build on top of it.
+  </Step>
+</Steps>
 
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
-  </Card>
-  <Card
-    title="Code samples"
-    icon="code"
-    href="/essentials/code"
-  >
-    Add sample code to demonstrate how to use your product.
-  </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+## What your AI can do
 
-## Need inspiration?
+Once connected, your AI can naturally capture and retrieve anything you've shared with it:
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+| You say... | Tool used |
+|---|---|
+| "Remember this: decided to push the launch to Q2" | `capture_thought` |
+| "What did I capture about career changes?" | `search_thoughts` |
+| "Show me what I captured this week" | `list_thoughts` |
+| "How many thoughts do I have by topic?" | `thought_stats` |
+
+<Note>
+  Open Brain works across every AI client at once. A thought captured in Claude Desktop is immediately searchable from ChatGPT, Cursor, or Claude Code.
+</Note>
+
+## Explore the ecosystem
+
+<CardGroup cols={3}>
+  <Card title="Recipes" icon="flask" href="/recipes/overview">
+    Import data from Gmail, ChatGPT, Obsidian, X/Twitter, Instagram, and more.
+  </Card>
+  <Card title="Skills" icon="wand-magic-sparkles" href="/recipes/agent-skills">
+    Reusable AI behaviors you can install into Claude Code and similar clients.
+  </Card>
+  <Card title="Dashboards" icon="chart-line" href="/community/dashboards">
+    Community-built frontends in SvelteKit and Next.js, deployable to Vercel.
+  </Card>
+  <Card title="Integrations" icon="plug" href="/community/integrations">
+    Slack and Discord capture bots, Kubernetes deployment, and more.
+  </Card>
+  <Card title="Contributing" icon="code-pull-request" href="/community/contributing">
+    Add recipes, skills, schemas, dashboards, or integrations to the repo.
+  </Card>
+  <Card title="FAQ" icon="circle-question" href="/community/faq">
+    Common setup questions, troubleshooting, and gotchas.
+  </Card>
+</CardGroup>

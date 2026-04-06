@@ -1,0 +1,251 @@
+---
+title: "Home Maintenance Tracker"
+description: "Schedule recurring home maintenance tasks, log completed work, and let your agent surface what needs attention before it becomes an expensive surprise."
+---
+
+**Difficulty:** Beginner — Extension 2 of 6
+
+The HVAC tech mentioned the pump was showing wear 18 months ago. The warranty on the water heater expires next month. The gutters haven't been cleaned since — when, exactly? Without a system, these connections never get made. This extension tracks every maintenance task, calculates next-due dates automatically, and keeps a complete history of completed work and costs.
+
+## What you'll learn
+
+- Date handling and scheduling logic in PostgreSQL
+- One-to-many relationships (task → multiple log entries)
+- Automatic timestamp updates with triggers
+- Time-based queries (upcoming tasks, date ranges)
+- Computed fields (calculating `next_due` based on frequency)
+- Historical logging patterns
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Supabase project configured
+- Supabase CLI installed and linked to your project
+- Extension 1 recommended but not required
+
+## What gets built
+
+**Two tables:**
+
+- `maintenance_tasks` — Recurring or one-time maintenance items with priority and scheduling
+- `maintenance_logs` — History of completed work, including cost, who did it, and tech recommendations
+
+**MCP tools added to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `add_maintenance_task` | Create a recurring or one-time task with frequency and priority |
+| `log_maintenance` | Record completed work; auto-updates `last_completed` and `next_due` |
+| `get_upcoming_maintenance` | Query tasks due within a time window |
+| `search_maintenance_history` | Search completed work by task, category, or date range |
+
+<Note>
+  The `log_maintenance` tool triggers a database function that automatically recalculates `next_due` based on `frequency_days`. You never have to manually set the next date.
+</Note>
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new), paste the contents of `schema.sql` (shown below), and click **Run**.
+  </Step>
+
+  <Step title="Set your user ID">
+    If you completed Extension 1, you already have a `DEFAULT_USER_ID` set. Skip this step.
+
+    If starting here, generate a UUID and set it:
+
+    ```bash
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the MCP server">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `home-maintenance-mcp` |
+    | Download path | `extensions/home-maintenance` |
+  </Step>
+
+  <Step title="Connect to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Home Maintenance` |
+    | URL | Your MCP Connection URL |
+  </Step>
+
+  <Step title="Test it">
+    ```
+    Add a maintenance task: HVAC filter replacement, every 90 days, next due April 15th
+    ```
+
+    ```
+    Log maintenance: I just changed the HVAC filter, cost $45, did it myself
+    ```
+
+    ```
+    What maintenance is coming up in the next 30 days?
+    ```
+
+    ```
+    Show me the history for HVAC maintenance
+    ```
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 2: Home Maintenance Tracker
+-- Schema for tracking maintenance tasks and logging completed work
+
+-- Table: maintenance_tasks
+-- Recurring or one-time maintenance items
+CREATE TABLE IF NOT EXISTS maintenance_tasks (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    category TEXT, -- e.g. 'hvac', 'plumbing', 'exterior', 'appliance', 'landscaping'
+    frequency_days INTEGER, -- null for one-time tasks; 90 = quarterly, 365 = annual
+    last_completed TIMESTAMPTZ,
+    next_due TIMESTAMPTZ,
+    priority TEXT CHECK (priority IN ('low', 'medium', 'high', 'urgent')) DEFAULT 'medium',
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Table: maintenance_logs
+-- History of completed maintenance work
+CREATE TABLE IF NOT EXISTS maintenance_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    task_id UUID REFERENCES maintenance_tasks(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID NOT NULL,
+    completed_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    performed_by TEXT, -- who did the work (self, vendor name, etc.)
+    cost DECIMAL(10, 2),
+    notes TEXT,
+    next_action TEXT -- what the tech recommended for next time
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_maintenance_tasks_user_next_due
+    ON maintenance_tasks(user_id, next_due);
+
+CREATE INDEX IF NOT EXISTS idx_maintenance_logs_task_completed
+    ON maintenance_logs(task_id, completed_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_maintenance_logs_user_completed
+    ON maintenance_logs(user_id, completed_at DESC);
+
+-- Row Level Security
+ALTER TABLE maintenance_tasks ENABLE ROW LEVEL SECURITY;
+ALTER TABLE maintenance_logs ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY maintenance_tasks_user_policy ON maintenance_tasks
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY maintenance_logs_user_policy ON maintenance_logs
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_maintenance_tasks_updated_at ON maintenance_tasks;
+CREATE TRIGGER update_maintenance_tasks_updated_at
+    BEFORE UPDATE ON maintenance_tasks
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-calculate next_due when maintenance is logged
+CREATE OR REPLACE FUNCTION update_task_after_maintenance_log()
+RETURNS TRIGGER AS $$
+DECLARE
+    task_frequency INTEGER;
+BEGIN
+    SELECT frequency_days INTO task_frequency
+    FROM maintenance_tasks
+    WHERE id = NEW.task_id;
+
+    UPDATE maintenance_tasks
+    SET
+        last_completed = NEW.completed_at,
+        next_due = CASE
+            WHEN task_frequency IS NOT NULL
+                THEN NEW.completed_at + (task_frequency || ' days')::INTERVAL
+            ELSE NULL
+        END,
+        updated_at = now()
+    WHERE id = NEW.task_id;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_task_after_log ON maintenance_logs;
+CREATE TRIGGER update_task_after_log
+    AFTER INSERT ON maintenance_logs
+    FOR EACH ROW
+    EXECUTE FUNCTION update_task_after_maintenance_log();
+```
+
+## How the auto-scheduling works
+
+When you log completed maintenance with the `log_maintenance` tool, a database trigger fires automatically:
+
+1. It reads `frequency_days` from the parent task
+2. It sets `last_completed` to the completion timestamp
+3. It calculates `next_due` as `completed_at + frequency_days`
+
+For a task with `frequency_days = 90`, logging work today sets `next_due` 90 days from now. One-time tasks (`frequency_days = null`) leave `next_due` as null.
+
+This is the computed field pattern — your database maintains derived state without requiring your application to calculate it.
+
+## Expected outcome
+
+After setup, your agent can answer:
+
+- "What maintenance is due this month?"
+- "When did we last service the HVAC?"
+- "How much have we spent on plumbing maintenance this year?"
+- "What did the electrician recommend last time?"
+
+## Troubleshooting
+
+**`next_due` not updating after logging maintenance**
+
+- Verify the task has a `frequency_days` value set
+- Check the `log_maintenance` tool completed without errors
+- One-time tasks (`frequency_days = null`) correctly leave `next_due` as null
+
+**Date parsing errors**
+
+Ensure all dates are in ISO 8601 format: `YYYY-MM-DD` or `YYYY-MM-DDTHH:MM:SSZ`.
+
+## Cross-extension connections
+
+- **Task → Log entries pattern** — The `maintenance_tasks` → `maintenance_logs` one-to-many relationship is the same pattern you'll use in Extension 5 (contacts → interactions) and Extension 6 (applications → interviews)
+- **Time-based queries** — The upcoming-tasks query pattern carries directly into Extension 3 (Family Calendar) and Extension 6 (interview scheduling)
+- **Extension 1 link** — The `performed_by` field in maintenance logs can store vendor names from your Household Knowledge Base, creating an informal link between the two systems
+
+<CardGroup cols={2}>
+  <Card title="Next: Family Calendar" icon="calendar" href="/extensions/family-calendar">
+    Build on date-handling skills to create a shared multi-person calendar.
+  </Card>
+  <Card title="Previous: Household Knowledge Base" icon="house" href="/extensions/household-knowledge">
+    The foundation for all household data in your Open Brain.
+  </Card>
+</CardGroup>

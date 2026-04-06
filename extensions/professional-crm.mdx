@@ -1,0 +1,285 @@
+---
+title: "Professional CRM"
+description: "Contact tracking with interaction history, opportunity pipeline, and a bridge tool that connects thoughts from your Open Brain directly to the people they're about."
+---
+
+**Difficulty:** Intermediate — Extension 5 of 6
+
+You ran into someone at a conference six months ago. They mentioned they were looking for exactly what you do. You said you'd follow up. You didn't. That connection is gone — not because you're bad at networking, but because no human can track hundreds of professional relationships in their head. Your agent could have surfaced that contact three days after the conversation and reminded you to follow up. It can tell you, before your next meeting, every interaction you've had with that person and every note you've captured about them.
+
+## What you'll learn
+
+- Applying RLS patterns from Extension 4 to protect sensitive professional data
+- Multi-level relationships across three tables (contacts → interactions → opportunities)
+- Pipeline/opportunity tracking with stage management
+- Auto-updating timestamps (`last_contacted`) via database triggers
+- Cross-extension integration with the core Open Brain
+- Bridge tools that connect different data domains
+
+## Prerequisites
+
+- Working Open Brain setup ([Quickstart](/quickstart))
+- Extensions 1–4 recommended (RLS concepts from Extension 4 are required knowledge)
+- Supabase CLI installed and linked to your project
+
+## What gets built
+
+**Three tables:**
+
+- `professional_contacts` — People in your professional network with follow-up tracking
+- `contact_interactions` — Log of every touchpoint (meetings, calls, emails, events)
+- `opportunities` — Deals, projects, or potential collaborations with stage tracking
+
+**MCP tools added to your agent:**
+
+| Tool | What it does |
+|------|-------------|
+| `add_professional_contact` | Add a contact with company, title, LinkedIn, and how you met |
+| `search_contacts` | Search by name, company, or tags with ILIKE |
+| `log_interaction` | Log a touchpoint; auto-updates `last_contacted` timestamp |
+| `get_contact_history` | Get a contact's full profile and all interactions |
+| `create_opportunity` | Create a deal linked to a contact with stage and value |
+| `get_follow_ups_due` | List contacts with follow-up dates in the past or next N days |
+| `link_thought_to_contact` | **Cross-extension bridge** — links a thought from your Open Brain to a contact record |
+
+## Setup
+
+<Steps>
+  <Step title="Run the database schema">
+    Open the [Supabase SQL Editor](https://supabase.com/dashboard/project/_/sql/new), paste `schema.sql` (shown below), and click **Run**.
+
+    This creates three RLS-enabled tables with proper foreign key relationships and trigger-based timestamp automation.
+  </Step>
+
+  <Step title="Set your user ID">
+    If you've completed earlier extensions, your `DEFAULT_USER_ID` is already set. Skip this.
+
+    If starting here:
+
+    ```bash
+    uuidgen | tr '[:upper:]' '[:lower:]'
+    supabase secrets set DEFAULT_USER_ID=your-generated-uuid-here
+    ```
+  </Step>
+
+  <Step title="Deploy the MCP server">
+    | Setting | Value |
+    |---------|-------|
+    | Function name | `professional-crm-mcp` |
+    | Download path | `extensions/professional-crm` |
+  </Step>
+
+  <Step title="Connect to your AI">
+    In Claude Desktop, go to **Settings → Connectors → Add custom connector**.
+
+    | Setting | Value |
+    |---------|-------|
+    | Connector name | `Professional CRM` |
+    | URL | Your MCP Connection URL |
+  </Step>
+
+  <Step title="Test it">
+    ```
+    Add a professional contact: Sarah Chen, works at DataCorp as VP of Engineering, met at AI Summit 2026
+    ```
+
+    ```
+    Log an interaction: had coffee with Sarah Chen yesterday, discussed their RAG pipeline needs, follow up needed
+    ```
+
+    ```
+    Show me everyone I need to follow up with this week
+    ```
+
+    ```
+    Create an opportunity: DataCorp consulting project, linked to Sarah Chen, in conversation stage, estimated $50k
+    ```
+  </Step>
+</Steps>
+
+## Database schema
+
+```sql
+-- Extension 5: Professional CRM
+-- Schema for tracking professional contacts, interactions, and opportunities
+
+CREATE TABLE IF NOT EXISTS professional_contacts (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    name TEXT NOT NULL,
+    company TEXT,
+    title TEXT,
+    email TEXT,
+    phone TEXT,
+    linkedin_url TEXT,
+    how_we_met TEXT,
+    tags TEXT[] DEFAULT '{}',
+    notes TEXT,
+    last_contacted TIMESTAMPTZ,
+    follow_up_date DATE,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS contact_interactions (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    contact_id UUID REFERENCES professional_contacts(id) ON DELETE CASCADE NOT NULL,
+    user_id UUID NOT NULL,
+    interaction_type TEXT NOT NULL CHECK (
+        interaction_type IN ('meeting', 'email', 'call', 'coffee', 'event', 'linkedin', 'other')
+    ),
+    occurred_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    summary TEXT NOT NULL,
+    follow_up_needed BOOLEAN DEFAULT false,
+    follow_up_notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS opportunities (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID NOT NULL,
+    contact_id UUID REFERENCES professional_contacts(id) ON DELETE SET NULL,
+    title TEXT NOT NULL,
+    description TEXT,
+    stage TEXT DEFAULT 'identified' CHECK (
+        stage IN ('identified', 'in_conversation', 'proposal', 'negotiation', 'won', 'lost')
+    ),
+    value DECIMAL(12,2),
+    expected_close_date DATE,
+    notes TEXT,
+    created_at TIMESTAMPTZ DEFAULT now() NOT NULL,
+    updated_at TIMESTAMPTZ DEFAULT now() NOT NULL
+);
+
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_professional_contacts_user_last_contacted
+    ON professional_contacts(user_id, last_contacted);
+
+CREATE INDEX IF NOT EXISTS idx_professional_contacts_follow_up
+    ON professional_contacts(user_id, follow_up_date)
+    WHERE follow_up_date IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_contact_interactions_contact_occurred
+    ON contact_interactions(contact_id, occurred_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_opportunities_user_stage
+    ON opportunities(user_id, stage);
+
+-- Row Level Security
+ALTER TABLE professional_contacts ENABLE ROW LEVEL SECURITY;
+ALTER TABLE contact_interactions ENABLE ROW LEVEL SECURITY;
+ALTER TABLE opportunities ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY professional_contacts_user_policy ON professional_contacts
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY contact_interactions_user_policy ON contact_interactions
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+CREATE POLICY opportunities_user_policy ON opportunities
+    FOR ALL
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+
+-- Auto-update updated_at
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = now();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_professional_contacts_updated_at ON professional_contacts;
+CREATE TRIGGER update_professional_contacts_updated_at
+    BEFORE UPDATE ON professional_contacts
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+DROP TRIGGER IF EXISTS update_opportunities_updated_at ON opportunities;
+CREATE TRIGGER update_opportunities_updated_at
+    BEFORE UPDATE ON opportunities
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
+
+-- Auto-update last_contacted when an interaction is logged
+CREATE OR REPLACE FUNCTION update_last_contacted()
+RETURNS TRIGGER AS $$
+BEGIN
+    UPDATE professional_contacts
+    SET last_contacted = NEW.occurred_at
+    WHERE id = NEW.contact_id;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS update_contact_last_contacted ON contact_interactions;
+CREATE TRIGGER update_contact_last_contacted
+    AFTER INSERT ON contact_interactions
+    FOR EACH ROW
+    EXECUTE FUNCTION update_last_contacted();
+```
+
+## The `link_thought_to_contact` bridge tool
+
+This is the most important tool in this extension. Your core Open Brain captures thoughts all day long — some of those thoughts mention people. This tool bridges the gap.
+
+**Example workflow:**
+
+1. You capture a thought: *"Ran into Sarah Chen at the AI meetup — she's looking for someone to help with their RAG pipeline."*
+2. Your agent uses `link_thought_to_contact` to pull that thought from the `thoughts` table and append it to Sarah's contact record with a timestamp and reference.
+3. Before your next meeting with Sarah, your agent surfaces: *"Last interaction: coffee 2 weeks ago. Captured thought: looking for RAG pipeline help."*
+
+**How it works technically:** The tool takes a `thought_id` from the core Open Brain `thoughts` table and a `contact_id` from `professional_contacts`. It retrieves the thought content and appends it to the contact's notes. This creates a bidirectional link — the contact gains context, the thought gains a professional relationship tag.
+
+## Opportunity stages
+
+The `opportunities` table uses a defined stage progression:
+
+```
+identified → in_conversation → proposal → negotiation → won / lost
+```
+
+The `get_follow_ups_due` tool surfaces contacts where `follow_up_date` is in the past or within the next N days, so relationships don't go cold between stages.
+
+## Expected outcome
+
+After setup, your agent can answer:
+
+- "Who do I need to follow up with this week?"
+- "Show me my full history with Sarah Chen"
+- "What opportunities are in the proposal stage?"
+- "Find contacts I met at conferences who work in AI"
+- "Which thoughts have I captured about John's project?"
+
+## Troubleshooting
+
+**"Foreign key violation" when logging interactions**
+
+Ensure the contact exists before logging an interaction. Verify the `contact_id` UUID is correct and the contact belongs to the same `user_id`.
+
+**"Thought not found" when linking**
+
+Verify the `thought_id` exists in your core Open Brain `thoughts` table. Run:
+
+```sql
+SELECT id, content FROM thoughts WHERE id = 'your-thought-uuid';
+```
+
+## Cross-extension connections
+
+- **Core Open Brain** — The `link_thought_to_contact` tool directly queries the `thoughts` table from your core setup. This is the first extension that reads from the core database.
+- **Extension 6 (Job Hunt Pipeline)** — The bridge works in reverse too: `link_contact_to_professional_crm` in Extension 6 automatically creates professional contact records from recruiters and hiring managers, so your network persists after the job search ends.
+
+<CardGroup cols={2}>
+  <Card title="Next: Job Hunt Pipeline" icon="briefcase" href="/extensions/job-hunt">
+    The most complex build in the path — five tables, advanced pipeline tracking, and CRM integration.
+  </Card>
+  <Card title="Previous: Meal Planning" icon="utensils" href="/extensions/meal-planning">
+    Where you first learned Row Level Security and scoped server access.
+  </Card>
+</CardGroup>

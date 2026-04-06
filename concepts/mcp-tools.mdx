@@ -1,0 +1,381 @@
+---
+title: "MCP tools"
+description: "Parameter and return type reference for all four MCP tools exposed by the Open Brain server."
+---
+
+The Open Brain MCP server exposes four tools. AI clients discover them automatically when connected and call them based on natural language prompts. You do not invoke them directly — the AI decides which tool to call based on what you ask.
+
+## Connecting to the server
+
+The server runs as a Supabase Edge Function. The endpoint URL follows this pattern:
+
+```text
+https://<project-ref>.supabase.co/functions/v1/open-brain-mcp
+```
+
+Your access key must be included on every request. Two formats are accepted:
+
+```text
+# Query parameter (easiest — paste into any MCP client URL field)
+https://<project-ref>.supabase.co/functions/v1/open-brain-mcp?key=YOUR_ACCESS_KEY
+
+# Request header (used by Claude Code and mcp-remote)
+x-brain-key: YOUR_ACCESS_KEY
+```
+
+The server is implemented with Hono + `@hono/mcp` (StreamableHTTP transport), registered as `open-brain` version `1.0.0`.
+
+## Tool summary
+
+| Tool | What it does | Typical trigger |
+|---|---|---|
+| `capture_thought` | Save a new thought with auto-generated embedding and metadata | "Remember this…", "Save this…", "Note that…" |
+| `search_thoughts` | Semantic search by meaning | "What did I capture about…", "Find my notes on…" |
+| `list_thoughts` | Browse recent thoughts with filters | "What did I capture this week?", "Show my recent tasks" |
+| `thought_stats` | Summary statistics across all thoughts | "How many thoughts do I have?", "Who do I mention most?" |
+
+---
+
+## `capture_thought`
+
+Save a new thought to Open Brain. The server generates the semantic embedding and extracts structured metadata automatically before writing to the database.
+
+**Server registration:**
+
+```typescript
+server.registerTool(
+  "capture_thought",
+  {
+    title: "Capture Thought",
+    description:
+      "Save a new thought to the Open Brain. Generates an embedding and extracts metadata automatically. Use this when the user wants to save something to their brain directly from any AI client — notes, insights, decisions, or migrated content from other systems.",
+    inputSchema: {
+      content: z.string().describe("The thought to capture — a clear, standalone statement that will make sense when retrieved later by any AI"),
+    },
+  },
+  ...
+);
+```
+
+### Input
+
+<ParamField path="content" type="string" required>
+  The thought to capture. Write as a clear, standalone statement that makes sense when read without context — it will be retrieved later by a different AI in a different conversation.
+</ParamField>
+
+### What happens internally
+
+1. `getEmbedding(content)` and `extractMetadata(content)` are called in parallel via `Promise.all`.
+2. `getEmbedding` calls OpenRouter with `openai/text-embedding-3-small`, returning a `float[1536]`.
+3. `extractMetadata` calls OpenRouter with `openai/gpt-4o-mini`, returning a JSON object with `type`, `topics`, `people`, `action_items`, `dates_mentioned`.
+4. `supabase.rpc("upsert_thought", { p_content, p_payload })` is called. The function computes a SHA-256 fingerprint and either inserts a new row or merges metadata on a duplicate.
+5. The embedding is written to `thoughts.embedding` via a separate `UPDATE`.
+
+### Output
+
+A plain text confirmation string in this format:
+
+```text
+Captured as <type> — <topics> | People: <people> | Actions: <action_items>
+```
+
+The `People:` and `Actions:` segments are omitted if those arrays are empty.
+
+**Example:**
+
+```text
+Captured as task — product, launch | People: Sarah, Marcus | Actions: Follow up with Marcus about timeline
+```
+
+<ResponseField name="text" type="string">
+  Confirmation string describing the captured thought's type, topics, people mentioned, and action items extracted. People and action items are omitted if empty.
+</ResponseField>
+
+---
+
+## `search_thoughts`
+
+Search your captured thoughts by semantic meaning. Uses cosine similarity over stored 1536-dim embeddings — finds conceptually related content even when there is no keyword overlap.
+
+**Server registration:**
+
+```typescript
+server.registerTool(
+  "search_thoughts",
+  {
+    title: "Search Thoughts",
+    description:
+      "Search captured thoughts by meaning. Use this when the user asks about a topic, person, or idea they've previously captured.",
+    inputSchema: {
+      query: z.string().describe("What to search for"),
+      limit: z.number().optional().default(10),
+      threshold: z.number().optional().default(0.5),
+    },
+  },
+  ...
+);
+```
+
+### Inputs
+
+<ParamField path="query" type="string" required>
+  What to search for, expressed in natural language. The server generates an embedding of this string and finds stored thoughts with high cosine similarity.
+</ParamField>
+
+<ParamField path="limit" type="number" default="10">
+  Maximum number of results to return.
+</ParamField>
+
+<ParamField path="threshold" type="number" default="0.5">
+  Minimum similarity score (0.0–1.0) for a result to be included. Lower values return more results with weaker matches. The underlying `match_thoughts` SQL function defaults to `0.7`; the MCP tool overrides this to `0.5` for broader recall. Use `0.3` for very wide searches, `0.8` for tight ones.
+</ParamField>
+
+### Output
+
+A formatted text block with one section per result, ordered by similarity descending:
+
+```text
+Found <N> thought(s):
+
+--- Result 1 (87.3% match) ---
+Captured: 3/15/2026
+Type: task
+Topics: product, launch
+People: Sarah, Marcus
+Actions: Follow up with Marcus about timeline
+
+Decided to move the launch to March 15 because of the QA blockers.
+
+--- Result 2 (71.0% match) ---
+...
+```
+
+<ResponseField name="text" type="string">
+  Formatted list of matching thoughts. Each result includes similarity percentage, capture date, type, topics, people, action items (when present), and the full thought content.
+</ResponseField>
+
+---
+
+## `list_thoughts`
+
+Browse recently captured thoughts in reverse chronological order, with optional filters for type, topic, person, or time window.
+
+**Server registration:**
+
+```typescript
+server.registerTool(
+  "list_thoughts",
+  {
+    title: "List Recent Thoughts",
+    description:
+      "List recently captured thoughts with optional filters by type, topic, person, or time range.",
+    inputSchema: {
+      limit: z.number().optional().default(10),
+      type: z.string().optional().describe("Filter by type: observation, task, idea, reference, person_note"),
+      topic: z.string().optional().describe("Filter by topic tag"),
+      person: z.string().optional().describe("Filter by person mentioned"),
+      days: z.number().optional().describe("Only thoughts from the last N days"),
+    },
+  },
+  ...
+);
+```
+
+### Inputs
+
+<ParamField path="limit" type="number" default="10">
+  Maximum number of thoughts to return. Applied after all filters.
+</ParamField>
+
+<ParamField path="type" type="string">
+  Filter by thought type. Must be one of: `observation`, `task`, `idea`, `reference`, `person_note`. Uses JSONB containment (`metadata @> {"type": "..."}`) with the GIN index.
+</ParamField>
+
+<ParamField path="topic" type="string">
+  Filter to thoughts that include this tag in their `topics` array. Case-sensitive, must match exactly. Uses JSONB containment (`metadata @> {"topics": ["..."]}`).
+</ParamField>
+
+<ParamField path="person" type="string">
+  Filter to thoughts that mention this person in their `people` array. Case-sensitive, must match exactly as extracted by the LLM. Uses JSONB containment (`metadata @> {"people": ["..."]}`).
+</ParamField>
+
+<ParamField path="days" type="number">
+  Only return thoughts captured in the last N days. Computed as `created_at >= now() - interval 'N days'`. Uses the `created_at desc` B-tree index.
+</ParamField>
+
+### Output
+
+A numbered list ordered by `created_at` descending:
+
+```text
+5 recent thought(s):
+
+1. [3/15/2026] (task - product, launch)
+   Decided to move the launch to March 15 because of the QA blockers.
+
+2. [3/14/2026] (person_note - team)
+   Marcus mentioned he's thinking about moving to the platform team.
+
+...
+```
+
+<ResponseField name="text" type="string">
+  Numbered list of thoughts. Each entry shows the capture date, type, topic tags, and full content.
+</ResponseField>
+
+---
+
+## `thought_stats`
+
+Get a statistical summary of everything in your Open Brain: total count, date range, type breakdown, and the top 10 most-mentioned topics and people.
+
+**Server registration:**
+
+```typescript
+server.registerTool(
+  "thought_stats",
+  {
+    title: "Thought Statistics",
+    description: "Get a summary of all captured thoughts: totals, types, top topics, and people.",
+    inputSchema: {},
+  },
+  ...
+);
+```
+
+### Inputs
+
+This tool takes no inputs.
+
+### Output
+
+A plain text summary:
+
+```text
+Total thoughts: 142
+Date range: 1/1/2026 → 4/6/2026
+
+Types:
+  observation: 54
+  task: 38
+  idea: 27
+  reference: 14
+  person_note: 9
+
+Top topics:
+  product: 41
+  engineering: 28
+  career: 19
+  ...
+
+People mentioned:
+  Sarah: 22
+  Marcus: 17
+  ...
+```
+
+<ResponseField name="text" type="string">
+  Multi-line summary with total count, date range, per-type counts, and top 10 topics and people sorted by frequency. People and topics sections are omitted if no thoughts have been tagged with them.
+</ResponseField>
+
+---
+
+## Natural language triggers
+
+AI clients decide which tool to call based on the prompt. The table below shows example prompts from the [getting started guide](/quickstart) and which tool each triggers:
+
+| Prompt | Tool |
+|---|---|
+| "Save this: decided to move the launch to March 15 because of the QA blockers" | `capture_thought` |
+| "Remember that Marcus wants to move to the platform team" | `capture_thought` |
+| "Note: Sarah is thinking about leaving her job to start a consulting business" | `capture_thought` |
+| "What did I capture about career changes?" | `search_thoughts` |
+| "Find my notes about the API redesign" | `search_thoughts` |
+| "What do I know about the platform migration?" | `search_thoughts` |
+| "What did I capture this week?" | `list_thoughts` |
+| "Show me my recent tasks" | `list_thoughts` (type=task) |
+| "Show my recent ideas" | `list_thoughts` (type=idea) |
+| "What did I capture about Sarah?" | `search_thoughts` or `list_thoughts` (person=Sarah) |
+| "How many thoughts do I have?" | `thought_stats` |
+| "Who do I mention most?" | `thought_stats` |
+
+<Tip>
+  ChatGPT is less likely than Claude to pick the right tool automatically. If it doesn't use Open Brain on its own, be explicit: "Use the Open Brain `search_thoughts` tool to find my notes about project planning." After a few explicit invocations, it tends to pick up the pattern.
+</Tip>
+
+---
+
+## TypeScript types
+
+The tool handler signatures from `server/index.ts`:
+
+```typescript
+// search_thoughts handler input
+interface SearchThoughtsInput {
+  query: string;
+  limit: number;     // default 10
+  threshold: number; // default 0.5
+}
+
+// list_thoughts handler input
+interface ListThoughtsInput {
+  limit: number;        // default 10
+  type?: string;        // "observation" | "task" | "idea" | "reference" | "person_note"
+  topic?: string;
+  person?: string;
+  days?: number;
+}
+
+// capture_thought handler input
+interface CaptureThoughtInput {
+  content: string;
+}
+
+// thought_stats has no input
+
+// Supabase match_thoughts RPC result row
+interface MatchThoughtsRow {
+  content: string;
+  metadata: Record<string, unknown>;
+  similarity: number;
+  created_at: string;
+}
+
+// Supabase list_thoughts query result row
+interface ThoughtRow {
+  content: string;
+  metadata: Record<string, unknown>;
+  created_at: string;
+}
+
+// upsert_thought RPC result
+interface UpsertThoughtResult {
+  id: string;       // UUID
+  fingerprint: string; // SHA-256 hex
+}
+```
+
+## Dependencies
+
+The MCP server (`server/deno.json`) uses these packages:
+
+```json
+{
+  "imports": {
+    "@hono/mcp": "npm:@hono/mcp@0.1.1",
+    "@modelcontextprotocol/sdk": "npm:@modelcontextprotocol/sdk@1.24.3",
+    "hono": "npm:hono@4.9.2",
+    "zod": "npm:zod@4.1.13",
+    "@supabase/supabase-js": "npm:@supabase/supabase-js@2.47.10"
+  }
+}
+```
+
+<CardGroup cols={2}>
+  <Card title="Architecture" icon="layer-group" href="/concepts/architecture">
+    How the three layers fit together, auth flow, and data flow diagrams.
+  </Card>
+  <Card title="Database schema" icon="table" href="/concepts/database-schema">
+    Column definitions, indexes, and SQL function signatures.
+  </Card>
+</CardGroup>

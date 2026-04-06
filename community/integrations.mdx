@@ -1,0 +1,388 @@
+---
+title: "Integrations"
+description: "Capture sources and deployment targets that extend Open Brain beyond its defaults — Slack, Discord, and fully self-hosted Kubernetes."
+---
+
+Integrations extend Open Brain in two directions: **capture sources** that let you pipe thoughts in from tools you already live in, and **deployment targets** that replace Supabase with self-managed infrastructure.
+
+The three integrations currently available cover both:
+
+<CardGroup cols={2}>
+  <Card title="Slack Capture" icon="slack" href="#slack-capture">
+    Type a thought in Slack, get an instant threaded confirmation with extracted metadata.
+  </Card>
+  <Card title="Discord Capture" icon="discord" href="#discord-capture">
+    A bot that monitors designated channels and captures messages as thoughts.
+  </Card>
+  <Card title="Kubernetes Deployment" icon="server" href="#kubernetes-deployment">
+    Fully self-hosted PostgreSQL + pgvector on your own cluster — no Supabase required.
+  </Card>
+  <Card title="Contributing an integration" icon="code-pull-request" href="/community/contributing">
+    MCP extensions, webhooks, browser extensions, and capture sources are all open for contributions.
+  </Card>
+</CardGroup>
+
+## Why capture sources?
+
+The Open Brain MCP server already gives any connected AI a `capture_thought` tool — so Claude Desktop, ChatGPT, Cursor, and Claude Code can all write directly to your brain without switching apps.
+
+Capture sources solve a different problem: **capturing without an AI in the loop**. When a thought surfaces in Slack during a meeting, or a conversation in Discord sparks an idea, you want to capture it immediately without opening another app. These integrations give you a direct write path that still goes through embedding and classification before hitting your `thoughts` table.
+
+<Note>
+  All three integrations connect to the same `thoughts` table and the same MCP server you set up during initial configuration. A thought captured via Slack is immediately searchable from Claude Desktop, ChatGPT, or any other connected AI.
+</Note>
+
+---
+
+## Slack Capture
+
+Add Slack as a quick-capture interface for your Open Brain. Type a thought in a dedicated Slack channel and it gets automatically embedded, classified, and stored — with a threaded confirmation reply showing how your message was categorized.
+
+**Cost:** Slack is free. The Edge Function uses the same OpenRouter credits from your main Open Brain setup — embeddings cost ~$0.02 per million tokens, metadata extraction ~$0.15 per million input tokens. For 20 thoughts/day, expect roughly $0.10–0.30/month.
+
+### Prerequisites
+
+- A working Open Brain setup (database, OpenRouter API key, and Supabase CLI installed)
+- A Slack workspace (free tier works)
+
+### Setup
+
+<Steps>
+  <Step title="Create your Slack capture channel">
+    1. In Slack, click **+** next to Channels → **Create new channel**
+    2. Name it `capture` (or `brain`, `inbox`, whatever feels natural)
+    3. Set it to **Private** — this is personal data
+    4. Get the Channel ID: right-click the channel → **View channel details** → scroll to the bottom (starts with `C`)
+    5. Save the Channel ID — you'll need it later
+  </Step>
+
+  <Step title="Create the Slack app">
+    1. Go to [api.slack.com/apps](https://api.slack.com/apps) → **Create New App** → **From scratch**
+    2. Name it "Open Brain" and select your workspace → **Create App**
+    3. In the left sidebar → **OAuth & Permissions** → scroll to **Bot Token Scopes**
+    4. Add three scopes: `channels:history`, `groups:history`, `chat:write`
+    5. Scroll up → **Install to Workspace** → **Allow**
+    6. Copy the **Bot User OAuth Token** (starts with `xoxb-`) — save it
+    7. In your Slack capture channel, type `/invite @Open Brain` to add the bot
+
+    <Note>
+      Don't configure Event Subscriptions yet — you need the Edge Function URL from the next step first.
+    </Note>
+  </Step>
+
+  <Step title="Deploy the Edge Function">
+    Verify the Supabase CLI is installed, then log in and link your project:
+
+    ```bash
+    supabase --version
+    supabase login
+    supabase link --project-ref YOUR_PROJECT_REF
+    ```
+
+    Create the function:
+
+    ```bash
+    supabase functions new ingest-thought
+    ```
+
+    Open `supabase/functions/ingest-thought/index.ts` and replace its contents with the full function code from [`integrations/slack-capture/`](https://github.com/NateBJones-Projects/OB1/tree/main/integrations/slack-capture) in the repo. The function receives Slack messages, generates embeddings via OpenRouter, extracts structured metadata (type, topics, people, action items), stores the thought, and replies with a threaded confirmation.
+
+    Set your secrets:
+
+    ```bash
+    supabase secrets set OPENROUTER_API_KEY=your-openrouter-key-here
+    supabase secrets set SLACK_BOT_TOKEN=xoxb-your-slack-bot-token-here
+    supabase secrets set SLACK_CAPTURE_CHANNEL=C0your-channel-id-here
+    ```
+
+    <Note>
+      `SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` are automatically available inside Edge Functions — you don't need to set them.
+    </Note>
+
+    Deploy:
+
+    ```bash
+    supabase functions deploy ingest-thought --no-verify-jwt
+    ```
+
+    Copy the Edge Function URL from the deployment output — it looks like `https://YOUR_PROJECT_REF.supabase.co/functions/v1/ingest-thought`. You'll need it in the next step.
+  </Step>
+
+  <Step title="Connect Slack to the Edge Function">
+    1. Go to [api.slack.com/apps](https://api.slack.com/apps) → select your Open Brain app
+    2. Left sidebar → **Event Subscriptions** → toggle **Enable Events** on
+    3. Paste your Edge Function URL in the **Request URL** field
+    4. Wait for the green **Verified** checkmark
+    5. Under **Subscribe to bot events**, add both: `message.channels` and `message.groups`
+    6. Click **Save Changes** (reinstall if prompted)
+
+    <Warning>
+      You need both `message.channels` and `message.groups`. Public channels fire the first, private channels fire the second. If you only add one, messages in the other channel type will silently fail — no error, nothing captured.
+    </Warning>
+  </Step>
+
+  <Step title="Test it">
+    Go to your capture channel in Slack and type:
+
+    ```text
+    Sarah mentioned she's thinking about leaving her job to start a consulting business
+    ```
+
+    Wait 5–10 seconds. You should see a threaded reply:
+
+    ```text
+    Captured as person_note — career, consulting
+    People: Sarah
+    Action items: Check in with Sarah about consulting plans
+    ```
+
+    Then open your Supabase dashboard → **Table Editor** → `thoughts` and verify the row is there with an embedding and metadata.
+  </Step>
+</Steps>
+
+### What gets captured
+
+Every message you post in the capture channel is automatically:
+- Embedded with a 1536-dimensional vector for semantic search
+- Classified by type: `observation`, `task`, `idea`, `reference`, or `person_note`
+- Tagged with topics, people, action items, and dates (where applicable)
+- Stored in your `thoughts` table
+- Confirmed with a threaded reply showing the extracted metadata
+
+### Troubleshooting
+
+**Slack says "Request URL not verified"** — Your Edge Function isn't deployed or isn't reachable. Run `supabase functions deploy ingest-thought --no-verify-jwt` again and check for errors.
+
+**Messages aren't triggering the function** — Check Event Subscriptions: both `message.channels` and `message.groups` must be listed. Verify the bot is invited to the channel and the Channel ID in your secrets matches.
+
+**Duplicate database entries** — Slack retries webhook delivery if it doesn't receive a response within 3 seconds. The function includes built-in deduplication by checking for existing rows with the same `slack_ts`. Make sure you're on the latest version of the code.
+
+**Function runs but nothing appears in the database** — Check Edge Function logs: Supabase dashboard → **Edge Functions** → `ingest-thought` → **Logs**. The most common cause is an incorrect or out-of-credits OpenRouter key. Run `supabase secrets list` to verify.
+
+**No confirmation reply in Slack** — The bot token may be wrong, or the `chat:write` scope wasn't added. Go to your Slack app → **OAuth & Permissions** and verify. If you added the scope after installation, reinstall the app.
+
+---
+
+## Discord Capture
+
+A Discord bot that monitors designated channels and captures messages into Open Brain as thoughts. Mirrors the Slack capture pattern — same embedding and storage pipeline, different chat platform.
+
+### Prerequisites
+
+- A working Open Brain setup
+- A Discord account with permission to add bots to your server
+- Discord Developer Portal access (free)
+- Supabase CLI installed
+- OpenRouter API key
+
+### Setup
+
+<Steps>
+  <Step title="Create a Discord application and bot">
+    1. Go to [discord.com/developers/applications](https://discord.com/developers/applications) → **New Application**
+    2. Give it a name (e.g., "Open Brain") → **Create**
+    3. In the left sidebar → **Bot** → **Add Bot**
+    4. Under **Privileged Gateway Intents**, enable **Message Content Intent** — the bot can't read message text without this
+    5. Click **Reset Token** and copy the bot token — save it
+  </Step>
+
+  <Step title="Invite the bot to your server">
+    1. In the left sidebar → **OAuth2** → **URL Generator**
+    2. Under **Scopes**, select `bot`
+    3. Under **Bot Permissions**, select `Read Messages/View Channels` and `Read Message History`
+    4. Copy the generated URL and open it in your browser
+    5. Select your server and click **Authorize**
+  </Step>
+
+  <Step title="Get your channel IDs">
+    In Discord, go to **User Settings** → **Advanced** → enable **Developer Mode**. Then right-click any channel you want to monitor → **Copy Channel ID**. You can monitor multiple channels.
+  </Step>
+
+  <Step title="Deploy the Edge Function">
+    Copy the Discord Capture function from [`integrations/discord-capture/`](https://github.com/NateBJones-Projects/OB1/tree/main/integrations/discord-capture) into your Supabase functions directory, then set your environment variables:
+
+    ```bash
+    supabase secrets set OPENROUTER_API_KEY=your-openrouter-key-here
+    supabase secrets set DISCORD_BOT_TOKEN=your-discord-bot-token-here
+    supabase secrets set DISCORD_CHANNEL_IDS=channel-id-1,channel-id-2
+    ```
+
+    Deploy the function:
+
+    ```bash
+    supabase functions deploy discord-capture
+    ```
+  </Step>
+
+  <Step title="Test it">
+    Send a message in one of the monitored channels. Within a few seconds, a new thought should appear in your Supabase `thoughts` table with `source: "discord"` in the metadata field.
+  </Step>
+</Steps>
+
+### What gets stored
+
+Each captured message includes Discord-specific metadata in the `metadata` jsonb field:
+
+| Field | Value |
+|---|---|
+| `source` | `"discord"` |
+| `server` | Discord server name |
+| `channel` | Channel name |
+| `author` | Message author's Discord username |
+| `timestamp` | Original message timestamp |
+
+### Troubleshooting
+
+**Bot is online but not capturing messages** — Check that **Message Content Intent** is enabled in the Developer Portal (Bot → Privileged Gateway Intents). Verify the channel IDs in your config match the channels you're posting in.
+
+**Messages captured but not appearing in Supabase** — Check edge function logs: `supabase functions logs discord-capture`. The most common cause is a missing or incorrect `SUPABASE_SERVICE_ROLE_KEY`.
+
+**Duplicate thoughts from edited messages** — By default, message edits create a new thought. Set `UPDATE_ON_EDIT=true` in your environment variables to update the existing thought instead.
+
+---
+
+## Kubernetes Deployment
+
+Deploy Open Brain on your own Kubernetes cluster with self-hosted PostgreSQL + pgvector — no Supabase required. Created by [@velo](https://github.com/velo).
+
+This integration provides Kubernetes manifests and a modified MCP server that connects directly to PostgreSQL instead of Supabase. Your thoughts database, embeddings, and MCP endpoint all run on your own cluster. The MCP HTTP endpoint is served via Kubernetes Ingress, making it a remote endpoint accessible by URL from any MCP client.
+
+### Prerequisites
+
+- A working Kubernetes cluster (tested on K3s v1.31; compatible with any K8s distribution)
+- `kubectl` configured for your cluster
+- Docker installed (for building the MCP server image)
+- An embedding/chat API provider (OpenRouter, OpenAI, or any local model with an OpenAI-compatible API)
+- An ingress controller (Traefik, nginx-ingress, etc.) if you want external access
+
+### Setup
+
+<Steps>
+  <Step title="Build the MCP server Docker image">
+    From the `integrations/kubernetes-deployment/` directory:
+
+    ```bash
+    docker build -t openbrain-mcp-server:latest .
+    ```
+
+    Import the image into your cluster:
+
+    ```bash
+    # For K3s:
+    docker save openbrain-mcp-server:latest | sudo k3s ctr images import -
+
+    # For minikube:
+    minikube image load openbrain-mcp-server:latest
+
+    # For other clusters, push to your registry:
+    docker tag openbrain-mcp-server:latest your-registry/openbrain-mcp-server:latest
+    docker push your-registry/openbrain-mcp-server:latest
+    ```
+  </Step>
+
+  <Step title="Configure secrets">
+    ```bash
+    cp k8s/secrets.yml.example k8s/secrets.yml
+    ```
+
+    Edit `k8s/secrets.yml` with your actual credentials.
+
+    <Warning>
+      Never commit `k8s/secrets.yml`. It contains your database password and MCP access key.
+    </Warning>
+  </Step>
+
+  <Step title="Deploy to Kubernetes">
+    ```bash
+    kubectl apply -f k8s/secrets.yml
+    kubectl apply -f k8s/openbrain.yml
+    ```
+  </Step>
+
+  <Step title="Verify the deployment">
+    ```bash
+    # Check pod status
+    kubectl get pods -n openbrain
+
+    # Confirm the database is initialized
+    kubectl exec -n openbrain openbrain-0 -c db -- \
+      psql -U postgres -d openbrain -c '\dt'
+
+    # Test the MCP endpoint via port-forward
+    kubectl port-forward -n openbrain svc/openbrain 8000:8000 &
+    curl -X POST http://localhost:8000 \
+      -H "x-brain-key: YOUR_ACCESS_KEY" \
+      -H "Content-Type: application/json" \
+      -d '{"jsonrpc":"2.0","method":"tools/list","id":1}'
+    ```
+
+    A successful response lists four tools: `search_thoughts`, `list_thoughts`, `thought_stats`, and `capture_thought`.
+  </Step>
+
+  <Step title="Connect your MCP client">
+    For Claude Desktop or any MCP-compatible client, configure the remote endpoint. If using an Ingress with an external domain:
+
+    ```json
+    {
+      "mcpServers": {
+        "openbrain": {
+          "url": "https://brain.yourdomain.com",
+          "transport": "http",
+          "headers": {
+            "x-brain-key": "YOUR_ACCESS_KEY"
+          }
+        }
+      }
+    }
+    ```
+
+    Without an Ingress (in-cluster access only):
+
+    ```json
+    {
+      "mcpServers": {
+        "openbrain": {
+          "url": "http://openbrain.openbrain.svc.cluster.local:8000",
+          "transport": "http",
+          "headers": {
+            "x-brain-key": "YOUR_ACCESS_KEY"
+          }
+        }
+      }
+    }
+    ```
+  </Step>
+</Steps>
+
+### Using a local LLM
+
+To use a local model (Ollama, llama.cpp, BitNet, etc.) instead of OpenRouter, update the environment variables in `k8s/openbrain.yml`:
+
+```yaml
+- name: EMBEDDING_API_BASE
+  value: "http://your-local-model:8080/v1"
+- name: EMBEDDING_API_KEY
+  value: "not-needed"
+- name: EMBEDDING_MODEL
+  value: "your-model-name"
+- name: CHAT_API_BASE
+  value: "http://your-local-model:8080/v1"
+- name: CHAT_API_KEY
+  value: "not-needed"
+- name: CHAT_MODEL
+  value: "your-model-name"
+```
+
+<Note>
+  If your embedding model produces a different vector dimension than 1536, update the `vector(1536)` in the init SQL ConfigMap to match. You'll need to drop and recreate the `thoughts` table if changing dimensions on an existing database.
+</Note>
+
+### Troubleshooting
+
+**Pod stuck in CrashLoopBackOff (mcp-server)** — Check logs: `kubectl logs -n openbrain openbrain-0 -c mcp-server`. The most common cause is an invalid API key or an unreachable embedding API base URL.
+
+**Database not initialized / tables missing** — The init SQL runs only on first startup. If the data volume already exists from a previous deployment, the init script is skipped. Delete the volume directory and restart the pod: `kubectl delete pod openbrain-0 -n openbrain` (the StatefulSet will recreate it).
+
+**Embedding dimension mismatch** — Your model produces vectors of a different size than expected. Check your model's output dimension and update `vector(1536)` in the init SQL ConfigMap.
+
+**Connection refused to database** — Containers in the same pod communicate via `127.0.0.1`. This is normal Kubernetes multi-container pod behavior. Check that the `db` container is ready: `kubectl logs -n openbrain openbrain-0 -c db`.

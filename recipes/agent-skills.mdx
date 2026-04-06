@@ -1,0 +1,244 @@
+---
+title: "Agent skills"
+description: "Plain-text skill packs you can install into Claude Code, Codex, or Cursor to give your AI agent new, well-defined behaviors."
+---
+
+Skills are reusable agent behaviors packaged as plain-text `SKILL.md` files. Drop one into your AI client's skills directory and the agent gains a specific, well-defined capability that it can apply consistently across sessions.
+
+## Skills vs. recipes
+
+| | Skills | Recipes |
+|---|---|---|
+| **What it is** | A reusable prompt/behavior file | A full capability build |
+| **What you install** | A `SKILL.md` file | SQL, edge functions, scripts |
+| **Prerequisites** | An AI client that supports reusable instructions | A working Open Brain setup |
+| **Scope** | One behavior, portable across contexts | One capability, wired into your database |
+| **Clients** | Claude Code, Codex, Cursor, and others | Any MCP-connected AI |
+
+Several recipes depend on canonical skills as shared building blocks. When a recipe lists a skill in its `requires_skills`, install the skill first.
+
+## Installing a skill
+
+All skills follow the same installation pattern:
+
+<Steps>
+  <Step title="Copy the SKILL.md file">
+    For Claude Code:
+    ```bash
+    mkdir -p ~/.claude/skills/<skill-name>
+    cp skills/<skill-name>/SKILL.md ~/.claude/skills/<skill-name>/SKILL.md
+    ```
+    For Codex or Cursor, paste the contents into that client's equivalent reusable system prompt or project rules location.
+  </Step>
+  <Step title="Reload your AI client">
+    Restart or reload the client so it picks up the new skill file.
+  </Step>
+  <Step title="Verify">
+    Test the skill with one of its trigger conditions listed in the README. Confirm the agent responds with the expected structured behavior rather than an ad-hoc reply.
+  </Step>
+</Steps>
+
+<Tip>
+  Each skill README includes a **Trigger Conditions** section listing the exact phrases or situations that activate the skill. Read it before testing — skills are designed to fire on specific inputs, not every request.
+</Tip>
+
+## Available skill packs
+
+<AccordionGroup>
+
+  <Accordion title="Auto-Capture Skill Pack">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+Teaches your AI client to treat session close as a capture moment. When a work session, brainstorm, or evaluation run is wrapping up, the skill stores the highest-value outputs in Open Brain instead of relying on you to remember later.
+
+**What it captures:**
+- Each ACT NOW item as its own standalone thought, including what it is, why it matters, concrete next actions, and provenance
+- One session summary recording the themes and number of important items that emerged
+
+**What it skips:**
+- Raw brainstorming and transcript text
+- Parked or killed items
+- Obvious duplicates of thoughts already in Open Brain
+
+**Trigger conditions:** End-of-session phrases like "wrap up", "park this", "goodnight", or "let's stop here" — or finishing a Panning for Gold run with ACT NOW items.
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/auto-capture
+cp skills/auto-capture/SKILL.md ~/.claude/skills/auto-capture/SKILL.md
+```
+
+See the companion [Auto-Capture recipe](/recipes/workflows#auto-capture-protocol) for the full OB1 workflow, composition guidance, and examples for combining this skill with Panning for Gold.
+
+  </Accordion>
+
+  <Accordion title="Competitive Analysis Skill Pack">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+Turns a loose "analyze the competition" request into a structured competitive brief. The skill identifies the relevant competitor set, compares positioning and pricing, calls out real threats and openings, and ends with recommended moves instead of a generic market summary.
+
+**What it produces:**
+- A clearly scoped competitor set
+- A comparison table across the dimensions that matter for the decision
+- A positioning or market-map view
+- Explicit risks, opportunities, and recommended moves
+- Optional Open Brain capture of the highest-value takeaways
+
+**Trigger conditions:** "Analyze our competitors", "Benchmark our pricing", "Map the market", "Who are we up against?", "Build a SWOT", "Show me how we stack up against X, Y, and Z".
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/competitive-analysis
+cp skills/competitive-analysis/SKILL.md ~/.claude/skills/competitive-analysis/SKILL.md
+```
+
+<Note>
+  This skill is most useful when the prompt includes the decision it should support — pricing, positioning, roadmap, or diligence. Without a decision context, the output tends toward generic market summary.
+</Note>
+
+  </Accordion>
+
+  <Accordion title="Financial Model Review Skill Pack">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+Reviews an existing financial model for assumption quality, structural risk, and scenario gaps. Rather than summarizing what a model says, this skill interrogates whether the model is trustworthy — where the assumptions are thin, where the structure creates risk, and what scenarios haven't been tested.
+
+**What it produces:**
+- An assessment of key assumptions with quality ratings
+- Structural risk flags (circular references, hard-coded numbers, missing line items)
+- Scenario gap analysis (what outcomes the model can't represent)
+- Recommendations for the most impactful improvements
+
+**Trigger conditions:** "Review this model", "What's wrong with this forecast?", "Where are the weak assumptions?", "Check this spreadsheet".
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/financial-model-review
+cp skills/financial-model-review/SKILL.md ~/.claude/skills/financial-model-review/SKILL.md
+```
+
+  </Accordion>
+
+  <Accordion title="Deal Memo Drafting Skill Pack">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+Turns existing diligence materials — research, model reviews, meeting notes, competitive analysis — into a structured deal memo, IC memo, or partnership memo. The skill uses the artifacts from earlier workflow steps as inputs rather than asking the agent to reconstruct context from scratch.
+
+**What it produces:**
+- A structured recommendation memo with a clear verdict
+- Supporting evidence sections tied to specific diligence artifacts
+- Risk flags and mitigants
+- Open questions that remain unresolved
+
+**Trigger conditions:** "Draft the deal memo", "Turn this diligence into a memo", "Write the IC recommendation", "Summarize this into a partnership brief".
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/deal-memo-drafting
+cp skills/deal-memo-drafting/SKILL.md ~/.claude/skills/deal-memo-drafting/SKILL.md
+```
+
+  </Accordion>
+
+  <Accordion title="Research Synthesis Skill Pack">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+Synthesizes a source set into a decision-grade brief — findings, contradictions, confidence markers, and next questions. The skill organizes evidence by what it actually supports, preserves meaningful disagreement between sources, and marks confidence honestly rather than inflating certainty.
+
+**What it produces:**
+- A synthesis tied to a defined research question
+- Explicit contradictions rather than false consensus
+- Honest confidence signals tied to source quality
+- Gaps and next questions that matter to the decision
+- Optional Open Brain capture of the final synthesis
+
+**Trigger conditions:** "Synthesize these sources", "Turn this research into a brief", "What are the key findings?", "Where do these sources disagree?", "What can we actually conclude from this packet?"
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/research-synthesis
+cp skills/research-synthesis/SKILL.md ~/.claude/skills/research-synthesis/SKILL.md
+```
+
+  </Accordion>
+
+  <Accordion title="Meeting Synthesis Skill Pack">
+
+**Contributor:** [@NateBJones](https://github.com/NateBJones)
+
+Converts meeting notes or transcripts into structured outputs: decisions made, action items with owners, risks surfaced, and follow-up artifacts. The skill turns raw meeting content into something that can feed a deal memo, a strategy brief, or your Open Brain directly.
+
+**What it produces:**
+- A decision log with rationale
+- Action items with assigned owners and deadlines where available
+- Risks and open questions that surfaced in the meeting
+- Follow-up artifacts (next steps, blockers, pending decisions)
+
+**Trigger conditions:** "Synthesize these meeting notes", "Turn this transcript into decisions and actions", "What did we decide?", "What are the follow-ups from this call?"
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/meeting-synthesis
+cp skills/meeting-synthesis/SKILL.md ~/.claude/skills/meeting-synthesis/SKILL.md
+```
+
+  </Accordion>
+
+  <Accordion title="Panning for Gold Skill Pack">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+Turns brain dumps, transcripts, and raw multi-topic captures into an evaluated idea inventory. The skill extracts every thread first, evaluates the highest-signal ones second, and writes permanent outputs so nothing gets lost between agent runs or session compaction.
+
+**What it produces:**
+- A numbered thread inventory file saved to disk
+- Evaluated verdicts on the highest-signal threads (ACT NOW, research thread, park, kill)
+- A final gold-found synthesis file
+- Optional capture of the strongest outcomes back into Open Brain
+
+**Trigger conditions:** "Process this", "pan for gold", "brain dump", "what did I say?" — or when the input is a transcript, export, or multi-topic markdown file.
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/panning-for-gold
+cp skills/panning-for-gold/SKILL.md ~/.claude/skills/panning-for-gold/SKILL.md
+```
+
+<Note>
+  Panning for Gold pairs naturally with Auto-Capture. Run Panning for Gold to evaluate and triage raw input, then let Auto-Capture store the ACT NOW items to Open Brain at session close.
+</Note>
+
+  </Accordion>
+
+  <Accordion title="Claudeception Skill Pack">
+
+**Contributor:** [@jaredirish](https://github.com/jaredirish)
+
+Watches for hard-won knowledge during real work — debugging breakthroughs, misleading errors, undocumented behavior, repeatable shortcuts — and turns that discovery into a new skill saved back into Open Brain. Skills that create other skills.
+
+**What it produces:**
+- An assessment of which discoveries are worth preserving (reusable, non-trivial, specific, verified)
+- A check against Open Brain and local skill directories for duplicates
+- A new `SKILL.md` with exact trigger conditions
+- An Open Brain capture so future sessions can find the new skill
+
+**Trigger conditions:** "Save this as a skill", "extract a skill from this", "what did we learn?" — or after a task that required non-obvious debugging or a workaround.
+
+**Installation:**
+```bash
+mkdir -p ~/.claude/skills/claudeception
+cp skills/claudeception/SKILL.md ~/.claude/skills/claudeception/SKILL.md
+```
+
+  </Accordion>
+
+</AccordionGroup>
+
+## All canonical skills
+
+The full list of canonical skill packs is in the [`/skills`](https://github.com/NateBJones-Projects/OB1/tree/main/skills) folder of the OB1 repository. The repository also contains newer community-contributed skills not listed here — browse the folder directly for the latest.

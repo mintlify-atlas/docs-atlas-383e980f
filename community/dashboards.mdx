@@ -1,0 +1,251 @@
+---
+title: "Community Dashboards"
+description: "Two community-built web frontends for Open Brain — one in SvelteKit, one in Next.js. Deploy to Vercel or Netlify in minutes."
+---
+
+The Open Brain core doesn't include a web UI — your AI client is the interface. But two community members built and contributed full-featured dashboards you can deploy directly on top of your existing Supabase backend.
+
+Both dashboards connect to your Open Brain data. Neither requires any changes to your database or MCP server. Pick the framework you prefer.
+
+<Tabs>
+  <Tab title="SvelteKit (headcrest)">
+    **Open Brain Dashboard** by [@headcrest](https://github.com/headcrest) — search, filter, and capture thoughts from a focused, production-ready SvelteKit UI with Supabase auth.
+  </Tab>
+  <Tab title="Next.js (alanshurafa)">
+    **Open Brain Dashboard (Next.js)** by [@alanshurafa](https://github.com/alanshurafa) — 8-page dark-themed dashboard with smart ingest, quality auditing, duplicate detection, and API-key authentication.
+  </Tab>
+</Tabs>
+
+---
+
+## Open Brain Dashboard (SvelteKit)
+
+Created by [@headcrest](https://github.com/headcrest), with auth fixes by [@matthallett1](https://github.com/matthallett1).
+
+This dashboard connects directly to your Open Brain MCP endpoint and gives you a web interface to capture new thoughts, search and filter existing ones, and inspect stats and recent activity — all behind Supabase email/password authentication.
+
+### What's included
+
+- **Capture** — Submit new thoughts from a web form; they flow through the MCP `capture_thought` tool
+- **Search** — Semantic (vector similarity) search across all your thoughts
+- **Filters** — Filter by type (`Observation`, `Task`, `Idea`, `Reference`, `Person Note`), topic, and people
+- **Stats** — Total thought count, recent capture activity
+- **Full thought view** — Open any thought for its full text and metadata
+- **Supabase auth** — Email/password sign-in via Supabase Authentication
+
+### Prerequisites
+
+- Working Open Brain setup
+- Supabase project URL and anon key
+- MCP Function URL and access key
+- Node.js 18+
+- A Supabase user with email/password credentials
+
+### Deploy
+
+<Steps>
+  <Step title="Install dependencies">
+    From the repo:
+
+    ```bash
+    cd dashboards/open-brain-dashboard
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    ```bash
+    cp .env.example .env.local
+    ```
+
+    Fill in your four values:
+
+    | Variable | Where to find it |
+    |---|---|
+    | `PUBLIC_SUPABASE_URL` | Supabase Dashboard → Settings → API → Project URL |
+    | `PUBLIC_SUPABASE_ANON_KEY` | Supabase Dashboard → Settings → API → `anon public` key |
+    | `MCP_URL` | Your deployed Edge Function URL: `https://<ref>.supabase.co/functions/v1/open-brain-mcp` |
+    | `MCP_KEY` | The `MCP_ACCESS_KEY` from your Open Brain setup; also visible after `?key=` in Claude Desktop → Settings → Connectors |
+  </Step>
+
+  <Step title="Create a sign-in user">
+    In the Supabase Dashboard → **Authentication** → **Add user** → create with email + password and enable **Auto Confirm**.
+
+    <Note>
+      If your existing Supabase user was created via OAuth, you won't have a password. Either click **Send password recovery** from the user detail panel, or create a second user with a `+dashboard` email alias (e.g., `you+dashboard@gmail.com`).
+    </Note>
+  </Step>
+
+  <Step title="Run locally">
+    ```bash
+    npm run dev
+    ```
+
+    Open `http://localhost:5173` and sign in.
+  </Step>
+
+  <Step title="Deploy to production">
+    **Vercel:** Import the `dashboards/open-brain-dashboard` folder and set the four environment variables in your project settings.
+
+    **Netlify:** Deploy as a SvelteKit site and set the same four environment variables.
+  </Step>
+</Steps>
+
+### Expected outcome
+
+After setup you should be able to:
+- See your total captured-thought count in the header
+- Search thoughts and get results sorted by recency
+- Filter by type, topic, and people
+- Open any thought for full text review
+- Capture a new thought and see it immediately persisted through MCP
+
+### Troubleshooting
+
+**`Missing PUBLIC_SUPABASE_URL or PUBLIC_SUPABASE_ANON_KEY`** — Confirm `.env.local` exists, both variables are set, and the dev server was restarted after editing the file.
+
+**App keeps redirecting to sign-in** — Verify you have a valid Supabase user with email/password credentials. The app requires auth via the `/signin` route.
+
+**MCP calls fail with 401 Unauthorized** — Verify `MCP_URL` points to the correct Supabase Edge Function and `MCP_KEY` matches the key in your Edge Function secrets.
+
+**Search returns "No thoughts found" but stats show thoughts exist** — Search uses semantic similarity, not keyword matching. Three things to check:
+1. **OpenRouter API key** — `search_thoughts` calls OpenRouter to embed the query. If the key is missing or has no credits, search returns nothing silently. Verify: `supabase secrets list | grep OPENROUTER`
+2. **Embeddings exist** — Thoughts captured before embeddings were configured aren't searchable. Check: `SELECT count(*) FROM thoughts WHERE embedding IS NULL`
+3. **Similarity threshold** — Short queries against long content may score below the default 0.5 threshold. Try a more specific phrase.
+
+**"Database error querying schema" on sign-in** — Your user was created via OAuth and has no password. Send a password recovery email from the Supabase Dashboard or create a new email/password user.
+
+---
+
+## Open Brain Dashboard (Next.js)
+
+Created by [@alanshurafa](https://github.com/alanshurafa).
+
+A full-featured web dashboard built with Next.js 16, React 19, TypeScript, and Tailwind CSS. Eight pages cover every aspect of managing your Open Brain — from browsing and search to quality auditing and duplicate detection. Authenticates via an encrypted session cookie; no API key is ever exposed to the browser.
+
+### What's included
+
+| Page | What it does |
+|---|---|
+| **Dashboard** | Stats overview (total thoughts, type distribution, top topics), recent activity, quick capture |
+| **Browse** | Paginated thought table with filters for type, source, and importance |
+| **Detail** | Full thought view with inline editing, delete, linked reflections, and related connections |
+| **Search** | Semantic (vector similarity) and full-text search with match scores and pagination |
+| **Add to Brain** | Smart ingest — short text goes directly to single capture; long text goes to extraction with a dry-run preview |
+| **Audit** | Quality review for low-score thoughts with bulk delete |
+| **Duplicates** | Semantic similarity detection with keep/delete/keep-both resolution |
+| **Login** | API key authentication via iron-session encrypted cookie |
+
+### Prerequisites
+
+- A working Open Brain setup with the **REST API gateway** (`open-brain-rest`) deployed
+- Node.js 18+
+- A Vercel account (free tier) or any Node.js host
+
+### Deploy
+
+<Steps>
+  <Step title="Install dependencies">
+    ```bash
+    cd dashboards/open-brain-dashboard-next
+    npm install
+    ```
+  </Step>
+
+  <Step title="Configure environment">
+    ```bash
+    cp .env.example .env
+    ```
+
+    Set your values:
+
+    ```text
+    NEXT_PUBLIC_API_URL=https://YOUR-PROJECT-REF.supabase.co/functions/v1/open-brain-rest
+    SESSION_SECRET=your-32-char-secret-here
+    ```
+
+    Generate a session secret:
+
+    ```bash
+    openssl rand -hex 32
+    ```
+  </Step>
+
+  <Step title="Run locally">
+    ```bash
+    npm run dev
+    ```
+
+    Open `http://localhost:3000`. You'll see the login page. Enter your Open Brain API key (the `MCP_ACCESS_KEY` from your Supabase Edge Function secrets).
+  </Step>
+
+  <Step title="Deploy to Vercel">
+    ```bash
+    npx vercel --prod
+    ```
+
+    Or connect the folder via the Vercel dashboard. Set `NEXT_PUBLIC_API_URL` and `SESSION_SECRET` in your Vercel project's environment variable settings.
+
+    <Tip>
+      The free Vercel tier is sufficient. The dashboard makes server-side API calls to your Open Brain REST endpoint — there's no heavy compute.
+    </Tip>
+  </Step>
+</Steps>
+
+### Authentication
+
+The dashboard uses **iron-session** for encrypted HTTP-only session cookies:
+
+1. You enter your Open Brain API key once at login
+2. The key is validated against the `/health` endpoint
+3. The key is stored in an encrypted session cookie — never in client-side JS or `localStorage`
+4. All server-side API calls use the key from the session
+5. Sessions expire after 24 hours
+
+### Optional: restricted content
+
+If you've applied the sensitivity-tiers primitive and want to control access to sensitive thoughts:
+
+1. Set `RESTRICTED_PASSPHRASE_HASH` in your environment: `echo -n "your-passphrase" | shasum -a 256`
+2. A lock/unlock toggle appears in the sidebar
+3. When locked (default), restricted thoughts are filtered from all views
+4. Enter your passphrase to temporarily unlock restricted content for the session
+
+If `RESTRICTED_PASSPHRASE_HASH` is not set, the toggle doesn't appear.
+
+### Troubleshooting
+
+**"Could not reach API" on login** — Verify `NEXT_PUBLIC_API_URL` is correct and your `open-brain-rest` Edge Function is deployed. Test directly: `curl https://YOUR-REF.supabase.co/functions/v1/open-brain-rest/health -H "x-brain-key: YOUR_KEY"`.
+
+**"SESSION_SECRET env var is required"** — The app requires a 32+ character secret for cookie encryption. Generate one with `openssl rand -hex 32`.
+
+**Build fails with SWC error** — This happens when `node_modules` was installed on a different platform (e.g., Windows modules on Linux). Delete `node_modules` and `package-lock.json`, then run `npm install` on your target platform.
+
+**Search returns no results** — Ensure thoughts have embeddings. Semantic search requires the `embedding` column to be populated. Run an embedding backfill if needed.
+
+**Ingest page shows "extracting" forever** — The ingest feature depends on a separate `smart-ingest` Edge Function. Check that it's deployed.
+
+---
+
+## Choosing between them
+
+<Tabs>
+  <Tab title="SvelteKit">
+    - Lighter, more focused feature set
+    - Supabase email/password authentication
+    - Direct MCP connection (no separate REST API needed)
+    - Good starting point if you want something simple
+    - Contributor: [@headcrest](https://github.com/headcrest)
+  </Tab>
+  <Tab title="Next.js">
+    - More pages: auditing, duplicates, smart ingest, inline editing
+    - API-key authentication via encrypted session cookies
+    - Requires the `open-brain-rest` Edge Function deployed separately
+    - Built with Next.js 16 + Tailwind CSS 4 dark theme
+    - Contributor: [@alanshurafa](https://github.com/alanshurafa)
+  </Tab>
+</Tabs>
+
+<Note>
+  Both dashboards are community contributions. They're not part of the core Open Brain codebase — they're maintained by their contributors. If you run into issues, open an issue in the OB1 repo and tag the contributor, or ask in the [Discord](https://discord.gg/Cgh9WJEkeG).
+</Note>
